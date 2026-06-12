@@ -1,0 +1,52 @@
+# Agnes Multimodal — Agent Interface Configuration
+# Compatible with: Codex, Claude Code, OpenClaw, Cursor, Windsurf
+interface:
+  display_name: "Agnes AI Multimodal"
+  short_description: >
+    Call Agnes AI generation APIs for text, image recognition, image generation,
+    image editing, video generation, keyframe animation, and prompt translation.
+    Supports agnes-2.0-flash, agnes-image-2.1-flash, agnes-video-v2.0.
+  default_prompt: >
+    Use Agnes AI to generate text, analyze images (Vision), create images,
+    generate videos, or translate prompts. Always read the user's intent
+    and choose the appropriate subcommand:
+
+    - text → text generation / chat
+    - vision → image recognition / understanding
+    - image → text-to-image or image-to-image
+    - video → text-to-video or image-to-video or keyframe animation
+    - translate → Chinese-to-English prompt translation
+    - video-status → check video generation progress
+    - smoke-test → verify API connectivity
+
+    When image input URLs are needed, remind the user that local images
+    must be uploaded to a public HTTP(S) URL first.
+
+tools:
+  - name: agnes_text
+    command: python scripts/agnes_client.py text
+    description: Generate text using agnes-2.0-flash
+
+  - name: agnes_vision
+    command: python scripts/agnes_client.py vision
+    description: Analyze / understand an image using agnes-2.0-flash Vision API
+
+  - name: agnes_image
+    command: python scripts/agnes_client.py image
+    description: Generate or edit an image using agnes-image-2.1-flash
+
+  - name: agnes_video
+    command: python scripts/agnes_client.py video
+    description: Create a video from text, image, or keyframes using agnes-video-v2.0
+
+  - name: agnes_video_status
+    command: python scripts/agnes_client.py video-status
+    description: Check the status of a video generation task
+
+  - name: agnes_translate
+    command: python scripts/agnes_client.py translate
+    description: Translate a Chinese prompt to English for AI generation
+
+  - name: agnes_smoke_test
+    command: python scripts/agnes_client.py smoke-test
+    description: Run a quick API connectivity test
