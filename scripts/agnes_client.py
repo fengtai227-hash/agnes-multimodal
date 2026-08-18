@@ -151,6 +151,7 @@ def generate_image(
     prompt: str,
     image_urls: list = None,
     size: str = "1024x768",
+    ratio: str = None,
     response_format: str = "url",
     no_translate: bool = False,
 ):
@@ -164,6 +165,9 @@ def generate_image(
         "prompt": prompt,
         "size": size,
     }
+    # 2.1 新增：档位式 size (1K/2K/3K/4K) 配合宽高比
+    if ratio:
+        payload["ratio"] = ratio
 
     if image_urls:
         payload["extra_body"] = {
@@ -424,7 +428,8 @@ Examples:
     p_img.add_argument("prompt", help="Image prompt")
     p_img.add_argument("--image-url", action="append", dest="image_urls",
                        help="Input image URL for i2i (can repeat)")
-    p_img.add_argument("--size", default="1024x768", help="Output size (default: 1024x768)")
+    p_img.add_argument("--size", default="1024x768", help="Output size: exact (1024x768) or tier (1K/2K/3K/4K, default: 1024x768)")
+    p_img.add_argument("--ratio", default=None, help="Aspect ratio for tier sizes: 1:1, 3:4, 4:3, 16:9, 9:16, 2:3, 3:2, 21:9 (default: 1:1)")
     p_img.add_argument("--no-translate", action="store_true", help="Skip auto-translation")
 
     # video
@@ -469,6 +474,7 @@ Examples:
             args.prompt,
             image_urls=args.image_urls,
             size=args.size,
+            ratio=args.ratio,
             no_translate=args.no_translate,
         )
     elif args.command == "video":
