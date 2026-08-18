@@ -18,14 +18,17 @@ POST /v1/chat/completions
 
 | Param | Type | Required | Notes |
 |-------|------|----------|-------|
-| `model` | string | yes | `agnes-2.0-flash` |
+| `model` | string | yes | `agnes-2.5-flash` |
 | `messages` | array | yes | OpenAI-compatible chat messages |
 | `temperature` | number | no | 0-2 |
 | `top_p` | number | no | 0-1 |
-| `max_tokens` | number | no | max output tokens |
+| `max_tokens` | number | no | max output tokens (2.5 supports up to 65.5K) |
 | `stream` | boolean | no | enable SSE streaming |
-| `tools` | array | no | Tool definitions for function calling (may be unstable) |
+| `tools` | array | no | Tool definitions for function calling |
 | `tool_choice` | string/object | no | Tool selection strategy |
+| `chat_template_kwargs` | object | no | `{"enable_thinking": true}` to enable 2.5 Thinking mode |
+
+**2.5 Flash Specs**: context 512K · max output 65.5K · also supports Responses API (`/v1/responses`) and Anthropic Messages API (`/v1/messages`) · pricing FREE ($0/1M tokens)
 
 ### 2. Image Generation (Text-to-Image & Image-to-Image)
 
@@ -37,7 +40,8 @@ POST /v1/images/generations
 |-------|------|----------|-------|
 | `model` | string | yes | `agnes-image-2.1-flash` |
 | `prompt` | string | yes | English prompt recommended |
-| `size` | string | no | e.g. `1024x768` |
+| `size` | string | no | exact (`1024x768`) or tier (`1K`/`2K`/`3K`/`4K`) |
+| `ratio` | string | no | aspect ratio: `1:1`/`3:4`/`4:3`/`16:9`/`9:16`/`2:3`/`3:2`/`21:9` (use with tier size) |
 | `extra_body` | object | no | Advanced workflow params |
 | `extra_body.image` | array | no | Input image URLs for i2i |
 | `extra_body.response_format` | string | no | `url` to get accessible URL |
@@ -95,7 +99,7 @@ Include camera movement and temporal elements:
 
 ## Auto-Translation
 
-Non-English prompts are auto-translated via `agnes-2.0-flash` before calling image/video APIs.
+Non-English prompts are auto-translated via `agnes-2.5-flash` before calling image/video APIs.
 Translation preserves: subject, scene, style, lighting, composition, camera movement, action descriptions.
 
 Use `--no-translate` flag to skip translation.

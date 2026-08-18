@@ -12,14 +12,15 @@
 
 | 能力 | 模型 | 状态 |
 |------|------|:--:|
-| 📝 文本生成 | `agnes-2.0-flash` | ✅ |
+| 📝 文本生成 | `agnes-2.5-flash` | ✅ |
+| 🧠 推理模式 (Thinking) | `agnes-2.5-flash` | ✅ |
 | 🖼️ 文生图 | `agnes-image-2.1-flash` | ✅ |
 | 🔄 图生图 | `agnes-image-2.1-flash` | ✅ |
-| 👁️ 图片理解 (Vision) | `agnes-2.0-flash` | ✅ |
+| 👁️ 图片理解 (Vision) | `agnes-2.5-flash` | ✅ |
 | 🎬 文生视频 | `agnes-video-v2.0` | ✅ |
 | 🎞️ 图生视频 | `agnes-video-v2.0` | ✅ |
 | 🔗 关键帧动画 | `agnes-video-v2.0` | ✅ |
-| 🌐 自动中译英 | `agnes-2.0-flash` | ✅ |
+| 🌐 自动中译英 | `agnes-2.5-flash` | ✅ |
 | ⏳ 异步轮询 | — | ✅ |
 
 ---
@@ -78,10 +79,12 @@ python scripts/agnes_client.py smoke-test
 # 文本生成
 python scripts/agnes_client.py text "解释量子计算"
 python scripts/agnes_client.py text "你好" --stream
+python scripts/agnes_client.py text "帮我调试这段代码" --thinking  # 2.5 推理模式
 
-# 文生图
+# 文生图（支持档位式尺寸 + 宽高比）
 python scripts/agnes_client.py image "A futuristic city at sunset, cinematic" --size 1024x768
 python scripts/agnes_client.py image "一只在月光下散步的猫"
+python scripts/agnes_client.py image "Cinematic hero image" --size 2K --ratio 16:9
 
 # 图生图
 python scripts/agnes_client.py image "Transform to cyberpunk night" --image-url "https://example.com/input.png"
@@ -115,7 +118,7 @@ python scripts/agnes_client.py translate "一只在月光下散步的猫"
 
 ### 👁️ Vision 桥接 — 给任意模型"看"图片
 
-`agnes-2.0-flash` 支持 OpenAI Vision API 格式。通过 `vision` 命令，可以先将图片转为文字描述，再传给任意不具备视觉能力的模型：
+`agnes-2.5-flash` 支持 OpenAI Vision API 格式。通过 `vision` 命令，可以先将图片转为文字描述，再传给任意不具备视觉能力的模型：
 
 ```
 图片 → vision 命令 → 文字描述 → 任意文本模型继续分析
@@ -123,7 +126,7 @@ python scripts/agnes_client.py translate "一只在月光下散步的猫"
 
 ### 🌐 自动翻译
 
-中文提示词自动调用 `agnes-2.0-flash` 翻译为英文，保留主体、场景、风格、光照等关键信息。使用 `--no-translate` 可跳过。
+中文提示词自动调用 `agnes-2.5-flash` 翻译为英文，保留主体、场景、风格、光照等关键信息。使用 `--no-translate` 可跳过。
 
 ### ⚡ 零依赖
 
@@ -146,7 +149,7 @@ python scripts/agnes_client.py translate "一只在月光下散步的猫"
 
 | 模型 | 定价 |
 |------|------|
-| `agnes-2.0-flash` (文本/Vision) | 免费 |
+| `agnes-2.5-flash` (文本/Vision) | 免费 |
 | `agnes-image-2.1-flash` (图片) | **免费** |
 | `agnes-video-v2.0` (视频) | 请查阅 [官网](https://platform.agnes-ai.com/) |
 

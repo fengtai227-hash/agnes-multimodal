@@ -12,14 +12,15 @@ A **WorkBuddy-native Skill** wrapping all [Agnes AI (Sapiens AI)](https://agnes-
 
 | Capability | Model | Status |
 |------|------|:--:|
-| 📝 Text Generation | `agnes-2.0-flash` | ✅ |
+| 📝 Text Generation | `agnes-2.5-flash` | ✅ |
+| 🧠 Thinking / Reasoning | `agnes-2.5-flash` | ✅ |
 | 🖼️ Text-to-Image | `agnes-image-2.1-flash` | ✅ |
 | 🔄 Image-to-Image | `agnes-image-2.1-flash` | ✅ |
-| 👁️ Image Recognition (Vision) | `agnes-2.0-flash` | ✅ |
+| 👁️ Image Recognition (Vision) | `agnes-2.5-flash` | ✅ |
 | 🎬 Text-to-Video | `agnes-video-v2.0` | ✅ |
 | 🎞️ Image-to-Video | `agnes-video-v2.0` | ✅ |
 | 🔗 Keyframe Animation | `agnes-video-v2.0` | ✅ |
-| 🌐 Auto Translation (CN→EN) | `agnes-2.0-flash` | ✅ |
+| 🌐 Auto Translation (CN→EN) | `agnes-2.5-flash` | ✅ |
 | ⏳ Async Polling | — | ✅ |
 
 ---
@@ -69,9 +70,11 @@ python scripts/agnes_client.py smoke-test
 ```bash
 # Text generation
 python scripts/agnes_client.py text "Explain quantum computing" --stream
+python scripts/agnes_client.py text "Debug this code" --thinking  # 2.5 thinking mode
 
-# Text-to-image
+# Text-to-image (tier sizes + ratio supported)
 python scripts/agnes_client.py image "A futuristic city at sunset, cinematic" --size 1024x768
+python scripts/agnes_client.py image "Cinematic hero image" --size 2K --ratio 16:9
 
 # Image-to-image
 python scripts/agnes_client.py image "Transform to cyberpunk night" --image-url "https://example.com/input.png"
@@ -105,7 +108,7 @@ python scripts/agnes_client.py translate "一只在月光下散步的猫"
 
 ### 👁️ Vision Bridge
 
-`agnes-2.0-flash` supports OpenAI Vision API format. Use the `vision` command to generate text descriptions of images, then feed them to any text-only model:
+`agnes-2.5-flash` supports OpenAI Vision API format. Use the `vision` command to generate text descriptions of images, then feed them to any text-only model:
 
 ```
 Image → vision command → text description → any LLM for further analysis
@@ -113,7 +116,7 @@ Image → vision command → text description → any LLM for further analysis
 
 ### 🌐 Auto Translation
 
-Chinese prompts are automatically translated to English via `agnes-2.0-flash`, preserving subject, scene, style, and lighting. Use `--no-translate` to skip.
+Chinese prompts are automatically translated to English via `agnes-2.5-flash`, preserving subject, scene, style, and lighting. Use `--no-translate` to skip.
 
 ### ⚡ Zero Dependencies
 
@@ -136,7 +139,7 @@ Pure Python standard library (`urllib` + `json` + `argparse`). No `pip install` 
 
 | Model | Pricing |
 |------|------|
-| `agnes-2.0-flash` (Text/Vision) | Free |
+| `agnes-2.5-flash` (Text/Vision) | Free |
 | `agnes-image-2.1-flash` (Image) | **Free** |
 | `agnes-video-v2.0` (Video) | Check [official site](https://platform.agnes-ai.com/) |
 

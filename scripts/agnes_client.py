@@ -70,9 +70,9 @@ def api_get(endpoint: str, timeout: int = 30) -> dict:
 # 自动翻译
 # ============================================================
 def translate_to_english(text: str) -> str:
-    """使用 agnes-2.0-flash 将中文提示词翻译为英文"""
+    """使用 agnes-2.5-flash 将中文提示词翻译为英文"""
     payload = {
-        "model": "agnes-2.0-flash",
+        "model": "agnes-2.5-flash",
         "messages": [
             {
                 "role": "system",
@@ -103,20 +103,23 @@ def translate_to_english(text: str) -> str:
 # ============================================================
 # 文本生成
 # ============================================================
-def generate_text(prompt: str, stream: bool = False, system: str = None):
-    """文本生成 — agnes-2.0-flash"""
+def generate_text(prompt: str, stream: bool = False, system: str = None, thinking: bool = False, max_tokens: int = 8192):
+    """文本生成 — agnes-2.5-flash（支持 Thinking 推理模式）"""
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
 
     payload = {
-        "model": "agnes-2.0-flash",
+        "model": "agnes-2.5-flash",
         "messages": messages,
         "temperature": 0.7,
-        "max_tokens": 4096,
+        "max_tokens": max_tokens,
         "stream": stream,
     }
+    # 2.5 Thinking 模式（编码/推理/多步任务更优，默认关闭）
+    if thinking:
+        payload["chat_template_kwargs"] = {"enable_thinking": True}
 
     if stream:
         payload["stream"] = True
@@ -295,9 +298,9 @@ def smoke_test():
     print("=" * 60)
 
     # 1. 文本生成
-    print("\n[1/4] Text Generation (agnes-2.0-flash)...")
+    print("\n[1/4] Text Generation (agnes-2.5-flash)...")
     result = api_post("/v1/chat/completions", {
-        "model": "agnes-2.0-flash",
+        "model": "agnes-2.5-flash",
         "messages": [{"role": "user", "content": "Say 'Hello, Agnes!' in one sentence."}],
         "max_tokens": 50,
     })
@@ -351,7 +354,7 @@ def analyze_image(
     max_tokens: int = 1000,
     no_translate: bool = False,
 ):
-    """图片理解 — 使用 agnes-2.0-flash 的视觉能力分析图片"""
+    """图片理解 — 使用 agnes-2.5-flash 的视觉能力分析图片"""
     if not no_translate and _needs_translation(prompt):
         prompt = translate_to_english(prompt)
 
@@ -366,7 +369,7 @@ def analyze_image(
     messages.append({"role": "user", "content": content})
 
     payload = {
-        "model": "agnes-2.0-flash",
+        "model": "agnes-2.5-flash",
         "messages": messages,
         "max_tokens": max_tokens,
         "temperature": 0.3,
@@ -418,10 +421,12 @@ Examples:
     sub = parser.add_subparsers(dest="command", help="Sub-command")
 
     # text
-    p_text = sub.add_parser("text", help="Text generation (agnes-2.0-flash)")
+    p_text = sub.add_parser("text", help="Text generation (agnes-2.5-flash)")
     p_text.add_argument("prompt", help="Text prompt")
     p_text.add_argument("--stream", action="store_true", help="Stream output")
     p_text.add_argument("--system", help="System prompt", default=None)
+    p_text.add_argument("--thinking", action="store_true", help="Enable Thinking mode (better for coding/reasoning)")
+    p_text.add_argument("--max-tokens", type=int, default=8192, help="Max output tokens (default: 8192)")
 
     # image
     p_img = sub.add_parser("image", help="Image generation (agnes-image-2.1-flash)")
@@ -456,7 +461,7 @@ Examples:
     sub.add_parser("smoke-test", help="Run smoke test")
 
     # vision — 图片理解
-    p_vis = sub.add_parser("vision", help="Image understanding via agnes-2.0-flash Vision API")
+    p_vis = sub.add_parser("vision", help="Image understanding via agnes-2.5-flash Vision API")
     p_vis.add_argument("--image-url", action="append", dest="image_urls", required=True,
                        help="Image URL to analyze (can repeat for multiple)")
     p_vis.add_argument("--prompt", default="Describe this image in detail.",
@@ -468,7 +473,8 @@ Examples:
     args = parser.parse_args()
 
     if args.command == "text":
-        generate_text(args.prompt, stream=args.stream, system=args.system)
+        generate_text(args.prompt, stream=args.stream, system=args.system,
+                      thinking=args.thinking, max_tokens=args.max_tokens)
     elif args.command == "image":
         generate_image(
             args.prompt,
