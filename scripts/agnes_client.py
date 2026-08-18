@@ -18,6 +18,7 @@ Agnes AI Multimodal Client — 全模态 API 客户端
 import argparse
 import json
 import os
+import struct
 import sys
 import time
 import urllib.request
@@ -64,6 +65,93 @@ def api_get(endpoint: str, timeout: int = 30) -> dict:
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
         return {"error": True, "status": e.code, "body": body}
+
+
+# ============================================================
+# 图片比例自动检测（i2i 主参考图）
+# ============================================================
+# agnes-image-2.1-flash 支持的官方 ratio 档位 (w:h)
+SUPPORTED_RATIOS = {
+    "1:1": 1.0,
+    "3:4": 3 / 4,
+    "4:3": 4 / 3,
+    "16:9": 16 / 9,
+    "9:16": 9 / 16,
+    "2:3": 2 / 3,
+    "3:2": 3 / 2,
+    "21:9": 21 / 9,
+}
+
+
+def fetch_image_head(url: str, max_bytes: int = 65536, timeout: int = 20) -> bytes:
+    """下载图片文件头部字节（PNG/JPEG 尺寸信息都在文件头，无需全量下载）"""
+    req = urllib.request.Request(url, headers={"Range": f"bytes=0-{max_bytes - 1}"}, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read(max_bytes)
+    except urllib.error.HTTPError:
+        # 部分图床不支持 Range，退化为整图下载（仍只保留头部）
+        try:
+            req2 = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req2, timeout=timeout) as resp:
+                return resp.read(max_bytes)
+        except Exception:
+            return b""
+    except Exception:
+        return b""
+
+
+def detect_image_size(url: str) -> tuple:
+    """检测图片 URL 的实际像素尺寸，返回 (width, height)；失败返回 None"""
+    data = fetch_image_head(url)
+    if not data:
+        return None
+
+    # PNG: 固定 8 字节签名 + IHDR (13 字节)，宽高在偏移 16-23
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        w, h = struct.unpack(">II", data[16:24])
+        return (w, h)
+
+    # JPEG: 扫描 SOF0-SOF3 段（标记 0xC0-0xC3），宽高位于段内偏移 5-8
+    if data[:2] == b"\xff\xd8":
+        i = 2
+        while i + 9 < len(data):
+            if data[i] != 0xFF:
+                i += 1
+                continue
+            marker = data[i + 1]
+            if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                seg_len = struct.unpack(">H", data[i + 2:i + 4])[0]
+                if seg_len >= 7 and i + 9 <= len(data):
+                    h, w = struct.unpack(">HH", data[i + 5:i + 9])
+                    return (w, h)
+                i += 2 + seg_len
+            else:
+                seg_len = struct.unpack(">H", data[i + 2:i + 4])[0]
+                i += 2 + seg_len
+        return None
+
+    return None
+
+
+def ratio_to_supported(w: int, h: int) -> str:
+    """将图片实际宽高比映射到最接近的官方 ratio 档位"""
+    actual = w / h
+    best_ratio = min(SUPPORTED_RATIOS.items(), key=lambda kv: abs(kv[1] - actual))
+    return best_ratio[0]
+
+
+def auto_detect_ratio(image_urls: list, index: int = 0) -> str:
+    """检测主参考图的比例并映射到官方 ratio。返回 ratio 字符串或 None"""
+    if not image_urls or index >= len(image_urls):
+        return None
+    size = detect_image_size(image_urls[index])
+    if not size:
+        return None
+    w, h = size
+    ratio = ratio_to_supported(w, h)
+    print(f"[INFO] Main reference image: {image_urls[index]} ({w}x{h}) → auto ratio: {ratio}")
+    return ratio
 
 
 # ============================================================
@@ -158,10 +246,21 @@ def generate_image(
     response_format: str = "url",
     no_translate: bool = False,
 ):
-    """文生图 & 图生图 — agnes-image-2.1-flash"""
+    """文生图 & 图生图 — agnes-image-2.1-flash
+
+    ratio 取值:
+      - None / "auto": 自动检测主参考图（第 1 张输入图）比例并映射到官方档位
+      - "1:1" / "3:4" / ... : 手动指定官方比例
+    """
     # 自动翻译
     if not no_translate and _needs_translation(prompt):
         prompt = translate_to_english(prompt)
+
+    # 自动比例检测：i2i 时未手动指定 ratio，则按主参考图（第一张输入图）比例输出
+    if ratio in (None, "auto") and image_urls:
+        ratio = auto_detect_ratio(image_urls, index=0)
+        if not ratio:
+            print("[WARN] Could not auto-detect image ratio, falling back to API default.", file=sys.stderr)
 
     payload = {
         "model": "agnes-image-2.1-flash",
@@ -434,7 +533,7 @@ Examples:
     p_img.add_argument("--image-url", action="append", dest="image_urls",
                        help="Input image URL for i2i (can repeat)")
     p_img.add_argument("--size", default="1024x768", help="Output size: exact (1024x768) or tier (1K/2K/3K/4K, default: 1024x768)")
-    p_img.add_argument("--ratio", default=None, help="Aspect ratio for tier sizes: 1:1, 3:4, 4:3, 16:9, 9:16, 2:3, 3:2, 21:9 (default: 1:1)")
+    p_img.add_argument("--ratio", default="auto", help="Aspect ratio: auto (detect from main input image, default), or 1:1, 3:4, 4:3, 16:9, 9:16, 2:3, 3:2, 21:9")
     p_img.add_argument("--no-translate", action="store_true", help="Skip auto-translation")
 
     # video

@@ -47,8 +47,11 @@ python scripts/agnes_client.py text "帮我写一个快速排序" --thinking  # 
 python scripts/agnes_client.py image "A futuristic city at sunset, cinematic realism" --size 1024x768
 python scripts/agnes_client.py image "一只在月光下散步的猫"
 
-# 图生图
-python scripts/agnes_client.py image "Transform to cyberpunk night" --image-url "https://...input.png"
+# 图生图（自动比例检测 — 默认按主参考图比例输出）
+python scripts/agnes_client.py image "Transform to cyberpunk night" --image-url "https://...input.png" --image-url "https://...ref.png"
+
+# 图生图 + 手动指定 ratio（不自动检测）
+python scripts/agnes_client.py image "Transform to cyberpunk night" --image-url "https://...input.png" --ratio 16:9
 
 # 文生视频（自动轮询）
 python scripts/agnes_client.py video "A drone flying over mountains at sunrise" --poll
@@ -157,6 +160,20 @@ Vision 命令参数：
 - 视频生成偶有 `division by zero` 服务端错误
 - 多图视频/关键帧动画尚未完整端到端验证
 - 图片 API 仅接受 HTTP(S) URL 作为输入，不支持 base64
+
+## 自动比例检测（i2i）
+
+i2i 时若未指定 `--ratio`，脚本会自动检测**主参考图**（即第一个 `--image-url`）的宽高比，并映射到 `agnes-image-2.1-flash` 支持的 8 种官方 ratio 之一（`1:1` / `3:4` / `4:3` / `16:9` / `9:16` / `2:3` / `3:2` / `21:9`），避免输出画布比例与输入主体不一致导致人物变形。
+
+```bash
+# 自动检测：会打印 [INFO] Main reference image: ... → auto ratio: ...
+python scripts/agnes_client.py image "prompt" --image-url MODEL_URL --image-url REF_URL --size 2K
+
+# 手动指定（跳过自动检测）
+python scripts/agnes_client.py image "prompt" --image-url MODEL_URL --ratio 16:9
+```
+
+> **主参考图约定**：第一个 `--image-url` 视为决定构图/比例的主体（通常是模特/产品图），第二张及以后视为风格/细节参考。如需切换主参考图，交换 `--image-url` 顺序即可。
 
 ## 参考
 
