@@ -65,6 +65,22 @@ def api_get(endpoint: str, timeout: int = 30) -> dict:
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
         return {"error": True, "status": e.code, "body": body}
+    except urllib.error.URLError as e:
+        return {"error": True, "reason": str(e.reason)}
+
+
+def api_get_raw(path: str, timeout: int = 30) -> dict:
+    """通用 GET 请求（非 /v1/ 前缀路径，如 /agnesapi?video_id=...）"""
+    url = f"{BASE_URL}{path}"
+    req = urllib.request.Request(url, headers=HEADERS, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        return {"error": True, "status": e.code, "body": body}
+    except urllib.error.URLError as e:
+        return {"error": True, "reason": str(e.reason)}
 
 
 # ============================================================
@@ -304,10 +320,22 @@ def generate_video(
     mode: str = "t2v",          # t2v / ti2vid / keyframes
     num_frames: int = 121,
     frame_rate: int = 24,
+    width: int = None,
+    height: int = None,
+    seed: int = None,
+    negative_prompt: str = None,
+    num_inference_steps: int = None,
     poll: bool = True,
     no_translate: bool = False,
 ):
-    """视频生成 — 文生视频 / 图生视频 / 关键帧动画"""
+    """视频生成 — 文生视频 / 图生视频 / 关键帧动画
+
+    支持 V2.0 新参数:
+      - width/height: 分辨率（自动标准化到 480p/720p/1080p 档位）
+      - seed: 随机种子，可复现结果
+      - negative_prompt: 反向提示词，避免不需要的内容
+      - num_inference_steps: 推理步数
+    """
     if prompt and not no_translate and _needs_translation(prompt):
         prompt = translate_to_english(prompt)
 
@@ -316,6 +344,17 @@ def generate_video(
         "num_frames": num_frames,
         "frame_rate": frame_rate,
     }
+
+    if width:
+        payload["width"] = width
+    if height:
+        payload["height"] = height
+    if seed is not None:
+        payload["seed"] = seed
+    if negative_prompt:
+        payload["negative_prompt"] = negative_prompt
+    if num_inference_steps:
+        payload["num_inference_steps"] = num_inference_steps
 
     if prompt:
         payload["prompt"] = prompt
@@ -348,12 +387,16 @@ def generate_video(
 
 
 def poll_video(task_id: str, max_wait: int = 600, interval: int = 5):
-    """轮询视频任务直到完成"""
+    """轮询视频任务直到完成（优先 video_id 新接口，回退 task_id 旧接口）"""
     print(f"[INFO] Polling video task {task_id} (max {max_wait}s)...", file=sys.stderr)
     start = time.time()
 
     while time.time() - start < max_wait:
-        result = api_get(f"/v1/videos/{task_id}")
+        # V2.0 推荐: GET /agnesapi?video_id=<ID>
+        result = api_get_raw(f"/agnesapi?video_id={task_id}")
+        if result.get("error") or not result.get("status"):
+            # 兼容旧版: GET /v1/videos/<TASK_ID>
+            result = api_get(f"/v1/videos/{task_id}")
         if result.get("error"):
             print(f"[WARN] Poll error: {result}", file=sys.stderr)
             time.sleep(interval)
@@ -363,7 +406,12 @@ def poll_video(task_id: str, max_wait: int = 600, interval: int = 5):
         print(f"[INFO] Status: {status} (elapsed: {int(time.time() - start)}s)", file=sys.stderr)
 
         if status in ("completed", "succeeded", "done"):
-            video_url = result.get("video_url") or result.get("url") or result.get("output_url")
+            video_url = (
+                result.get("video_url")
+                or result.get("url")
+                or result.get("output_url")
+                or (result.get("metadata") or {}).get("url")
+            )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             if video_url:
                 print(f"\n[VIDEO_URL] {video_url}")
@@ -379,10 +427,17 @@ def poll_video(task_id: str, max_wait: int = 600, interval: int = 5):
 
 
 def get_video_status(task_id: str):
-    """查询视频任务状态"""
-    result = api_get(f"/v1/videos/{task_id}")
+    """查询视频任务状态（优先 video_id 新接口）"""
+    result = api_get_raw(f"/agnesapi?video_id={task_id}")
+    if result.get("error") or not result.get("status"):
+        result = api_get(f"/v1/videos/{task_id}")
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    video_url = result.get("video_url") or result.get("url") or result.get("output_url")
+    video_url = (
+        result.get("video_url")
+        or result.get("url")
+        or result.get("output_url")
+        or (result.get("metadata") or {}).get("url")
+    )
     if video_url:
         print(f"\n[VIDEO_URL] {video_url}")
 
@@ -537,13 +592,19 @@ Examples:
     p_img.add_argument("--no-translate", action="store_true", help="Skip auto-translation")
 
     # video
-    p_vid = sub.add_parser("video", help="Video generation")
+    p_vid = sub.add_parser("video", help="Video generation (agnes-video-v2.0)")
     p_vid.add_argument("prompt", nargs="?", help="Video prompt")
     p_vid.add_argument("--image-url", action="append", dest="image_urls",
                        help="Input image URL for i2v (can repeat)")
     p_vid.add_argument("--keyframes", help="Comma-separated keyframe URLs")
-    p_vid.add_argument("--num-frames", type=int, default=121, help="Frame count (8n+1, default: 121)")
-    p_vid.add_argument("--frame-rate", type=int, default=24, help="Frame rate FPS (default: 24)")
+    p_vid.add_argument("--num-frames", type=int, default=121, help="Frame count (8n+1, max 441, default: 121)")
+    p_vid.add_argument("--frame-rate", type=int, default=24, help="Frame rate FPS 1-60 (default: 24)")
+    p_vid.add_argument("--width", type=int, default=None, help="Video width (auto-mapped to 480p/720p/1080p preset)")
+    p_vid.add_argument("--height", type=int, default=None, help="Video height (auto-mapped to preset)")
+    p_vid.add_argument("--seed", type=int, default=None, help="Random seed for reproducible results")
+    p_vid.add_argument("--negative-prompt", default=None, help="Negative prompt (what to avoid)")
+    p_vid.add_argument("--steps", type=int, default=None, dest="num_inference_steps",
+                       help="Number of inference steps")
     p_vid.add_argument("--poll", action="store_true", default=True, help="Wait for completion")
     p_vid.add_argument("--no-poll", action="store_true", help="Submit only, don't wait")
     p_vid.add_argument("--no-translate", action="store_true", help="Skip auto-translation")
@@ -604,6 +665,11 @@ Examples:
             mode=mode,
             num_frames=args.num_frames,
             frame_rate=args.frame_rate,
+            width=args.width,
+            height=args.height,
+            seed=args.seed,
+            negative_prompt=args.negative_prompt,
+            num_inference_steps=args.num_inference_steps,
             poll=poll_flag,
             no_translate=args.no_translate,
         )
