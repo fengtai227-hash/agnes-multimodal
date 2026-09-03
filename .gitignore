@@ -30,3 +30,15 @@ desktop.ini
 # Environment (do NOT commit .env files)
 .env
 .env.local
+
+# Media / test artifacts (safety net: never commit local images, videos or test scripts)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.bmp
+*.mp4
+*.mov
+*.bat
+*.bmp

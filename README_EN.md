@@ -14,12 +14,12 @@ A **WorkBuddy-native Skill** wrapping all [Agnes AI (Sapiens AI)](https://agnes-
 |------|------|:--:|
 | 📝 Text Generation | `agnes-2.5-flash` | ✅ |
 | 🧠 Thinking / Reasoning | `agnes-2.5-flash` | ✅ |
-| 🖼️ Text-to-Image | `agnes-image-2.1-flash` | ✅ |
-| 🔄 Image-to-Image | `agnes-image-2.1-flash` | ✅ |
+| 🖼️ Text-to-Image | `agnes-image-2.5-flash` (fallback 2.1 via --model) | ✅ |
+| 🔄 Image-to-Image | `agnes-image-2.5-flash` (auto-ratio) | ✅ |
 | 👁️ Image Recognition (Vision) | `agnes-2.5-flash` | ✅ |
-| 🎬 Text-to-Video | `agnes-video-v2.0` | ✅ |
-| 🎞️ Image-to-Video | `agnes-video-v2.0` | ✅ |
-| 🔗 Keyframe Animation | `agnes-video-v2.0` | ✅ |
+| 🎬 Text-to-Video | `agnes-video-v2.0` / `agnes-video-2.5-flash` | ✅ |
+| 🎞️ Image-to-Video | `agnes-video-v2.0` (ti2vid) / `video25 --image-url` | ✅ |
+| 🔗 Keyframe / First-Last-Frame | `agnes-video-v2.0` / `video25 --first/last-frame` | ✅ |
 | 🌐 Auto Translation (CN→EN) | `agnes-2.5-flash` | ✅ |
 | ⏳ Async Polling | — | ✅ |
 
@@ -73,7 +73,7 @@ python scripts/agnes_client.py text "Explain quantum computing" --stream
 python scripts/agnes_client.py text "Debug this code" --thinking  # 2.5 thinking mode
 
 # Text-to-image (tier sizes + ratio supported)
-python scripts/agnes_client.py image "A futuristic city at sunset, cinematic" --size 1024x768
+python scripts/agnes_client.py image "A futuristic city at sunset, cinematic" --size 2K --ratio 16:9
 python scripts/agnes_client.py image "Cinematic hero image" --size 2K --ratio 16:9
 
 # Image-to-image
@@ -140,8 +140,9 @@ Pure Python standard library (`urllib` + `json` + `argparse`). No `pip install` 
 | Model | Pricing |
 |------|------|
 | `agnes-2.5-flash` (Text/Vision) | Free |
-| `agnes-image-2.1-flash` (Image) | **Free** |
-| `agnes-video-v2.0` (Video) | Check [official site](https://platform.agnes-ai.com/) |
+| `agnes-image-2.5-flash` / `agnes-image-2.1-flash` (Image) | **Free** |
+| `agnes-video-v2.0` (Video V2.0) | **Free** |
+| `agnes-video-2.5-flash` (Next-gen video) | **Limited-time free** (720P) |
 
 ---
 

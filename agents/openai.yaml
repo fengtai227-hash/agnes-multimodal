@@ -5,7 +5,8 @@ interface:
   short_description: >
     Call Agnes AI generation APIs for text, image recognition, image generation,
     image editing, video generation, keyframe animation, and prompt translation.
-    Supports agnes-2.0-flash, agnes-image-2.1-flash, agnes-video-v2.0.
+    Supports agnes-2.5-flash (text/vision), agnes-image-2.5-flash (image),
+    agnes-video-v2.0 (video engine 1), agnes-video-2.5-flash (video engine 2).
   default_prompt: >
     Use Agnes AI to generate text, analyze images (Vision), create images,
     generate videos, or translate prompts. Always read the user's intent
@@ -14,7 +15,8 @@ interface:
     - text → text generation / chat
     - vision → image recognition / understanding
     - image → text-to-image or image-to-image
-    - video → text-to-video or image-to-video or keyframe animation
+    - video → text-to-video / image-to-video / keyframe animation (V2.0 engine)
+    - video25 → next-gen text/keyframe/reference video (agnes-video-2.5-flash)
     - translate → Chinese-to-English prompt translation
     - video-status → check video generation progress
     - smoke-test → verify API connectivity
@@ -25,23 +27,27 @@ interface:
 tools:
   - name: agnes_text
     command: python scripts/agnes_client.py text
-    description: Generate text using agnes-2.0-flash
+    description: Generate text using agnes-2.5-flash
 
   - name: agnes_vision
     command: python scripts/agnes_client.py vision
-    description: Analyze / understand an image using agnes-2.0-flash Vision API
+    description: Analyze / understand an image using agnes-2.5-flash Vision API
 
   - name: agnes_image
     command: python scripts/agnes_client.py image
-    description: Generate or edit an image using agnes-image-2.1-flash
+    description: Generate or edit an image using agnes-image-2.5-flash (add --model agnes-image-2.1-flash for legacy)
 
   - name: agnes_video
     command: python scripts/agnes_client.py video
-    description: Create a video from text, image, or keyframes using agnes-video-v2.0
+    description: Create a video from text, image, or keyframes using agnes-video-v2.0 (engine 1, free)
+
+  - name: agnes_video25
+    command: python scripts/agnes_client.py video25
+    description: Create next-gen video (text/keyframe/reference) using agnes-video-2.5-flash (engine 2, free 720P); paid upgrade via --model agnes-video-2.5
 
   - name: agnes_video_status
     command: python scripts/agnes_client.py video-status
-    description: Check the status of a video generation task
+    description: Check the status of a video generation task (add --model for 2.5 engine tasks)
 
   - name: agnes_translate
     command: python scripts/agnes_client.py translate
@@ -50,3 +56,4 @@ tools:
   - name: agnes_smoke_test
     command: python scripts/agnes_client.py smoke-test
     description: Run a quick API connectivity test
+

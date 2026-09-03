@@ -14,12 +14,12 @@
 |------|------|:--:|
 | 📝 文本生成 | `agnes-2.5-flash` | ✅ |
 | 🧠 推理模式 (Thinking) | `agnes-2.5-flash` | ✅ |
-| 🖼️ 文生图 | `agnes-image-2.1-flash` | ✅ |
-| 🔄 图生图 | `agnes-image-2.1-flash` | ✅ |
+| 🖼️ 文生图 | `agnes-image-2.5-flash` (可回退 2.1) | ✅ |
+| 🔄 图生图 | `agnes-image-2.5-flash` (自动比例) | ✅ |
 | 👁️ 图片理解 (Vision) | `agnes-2.5-flash` | ✅ |
-| 🎬 文生视频 | `agnes-video-v2.0` | ✅ |
-| 🎞️ 图生视频 | `agnes-video-v2.0` | ✅ |
-| 🔗 关键帧动画 | `agnes-video-v2.0` | ✅ |
+| 🎬 文生视频 | `agnes-video-v2.0` / `agnes-video-2.5-flash` | ✅ |
+| 🎞️ 图生视频 | `agnes-video-v2.0` (ti2vid) / `video25 --image-url` (reference) | ✅ |
+| 🔗 关键帧/首尾帧 | `agnes-video-v2.0` (keyframes) / `video25 --first/last-frame` | ✅ |
 | 🌐 自动中译英 | `agnes-2.5-flash` | ✅ |
 | ⏳ 异步轮询 | — | ✅ |
 
@@ -82,7 +82,7 @@ python scripts/agnes_client.py text "你好" --stream
 python scripts/agnes_client.py text "帮我调试这段代码" --thinking  # 2.5 推理模式
 
 # 文生图（支持档位式尺寸 + 宽高比）
-python scripts/agnes_client.py image "A futuristic city at sunset, cinematic" --size 1024x768
+python scripts/agnes_client.py image "A futuristic city at sunset, cinematic" --size 2K --ratio 16:9
 python scripts/agnes_client.py image "一只在月光下散步的猫"
 python scripts/agnes_client.py image "Cinematic hero image" --size 2K --ratio 16:9
 
@@ -150,8 +150,9 @@ python scripts/agnes_client.py translate "一只在月光下散步的猫"
 | 模型 | 定价 |
 |------|------|
 | `agnes-2.5-flash` (文本/Vision) | 免费 |
-| `agnes-image-2.1-flash` (图片) | **免费** |
-| `agnes-video-v2.0` (视频) | 请查阅 [官网](https://platform.agnes-ai.com/) |
+| `agnes-image-2.5-flash` / `agnes-image-2.1-flash` (图片) | **免费** |
+| `agnes-video-v2.0` (视频 V2.0) | **免费** |
+| `agnes-video-2.5-flash` (新一代视频) | **限时免费** (720P) |
 
 ---
 
