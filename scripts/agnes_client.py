@@ -21,6 +21,7 @@ Agnes AI Multimodal Client — 全模态 API 客户端
 """
 
 import argparse
+import base64
 import json
 import os
 import struct
@@ -132,9 +133,22 @@ def fetch_image_head(url: str, max_bytes: int = 65536, timeout: int = 20) -> byt
         return b""
 
 
-def detect_image_size(url: str) -> tuple:
-    """检测图片 URL 的实际像素尺寸，返回 (width, height)；失败返回 None"""
-    data = fetch_image_head(url)
+def detect_image_size(source: str) -> tuple:
+    """检测图片（URL / Data URI / 本地路径）的实际像素尺寸，返回 (width, height)；失败返回 None"""
+    if source.startswith("data:"):
+        try:
+            raw = source.split(",", 1)[1] if "," in source else ""
+            data = base64.b64decode(raw[:87382] + "=" * (-len(raw[:87382]) % 4))
+        except Exception:
+            return None
+    elif os.path.isfile(source):
+        try:
+            with open(source, "rb") as f:
+                data = f.read(65536)
+        except Exception:
+            return None
+    else:
+        data = fetch_image_head(source)
     if not data:
         return None
 
@@ -172,6 +186,40 @@ def ratio_to_supported(w: int, h: int) -> str:
     return best_ratio[0]
 
 
+# ============================================================
+# 图片输入归一化（URL / 本地文件 / Data URI）
+# ============================================================
+# 官网文档（agnes-image-2.0/2.1-flash）明确：i2i 的 image 数组
+# "Supports public URLs or Data URI Base64"，即支持 data:image/png;base64,...
+_MIME_MAP = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "webp": "webp", "gif": "gif", "bmp": "bmp"}
+
+
+def file_to_data_uri(path: str) -> str:
+    """本地图片文件 → data:image/...;base64,... Data URI"""
+    ext = os.path.splitext(path)[1].lower().lstrip(".")
+    mime = _MIME_MAP.get(ext, "png")
+    with open(path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("ascii")
+    return f"data:image/{mime};base64,{b64}"
+
+
+def normalize_image_input(value: str) -> str:
+    """归一化图片输入：本地文件路径转 Data URI base64（图像 API 官网明确支持），
+    URL / Data URI 原样返回。视频媒体字段官方文档仅写 URL（base64 为未文档化行为，
+    社区插件实测可用），失败时请回退公网 URL。"""
+    if not value:
+        return value
+    low = value.lower()
+    if low.startswith(("http://", "https://", "data:")):
+        return value
+    if os.path.isfile(value):
+        uri = file_to_data_uri(value)
+        print(f"[INFO] Local image → Data URI base64: {value} ({os.path.getsize(value)} bytes)", file=sys.stderr)
+        return uri
+    print(f"[WARN] Input is neither a URL nor an existing file, passing as-is: {value}", file=sys.stderr)
+    return value
+
+
 def auto_detect_ratio(image_urls: list, index: int = 0) -> str:
     """检测主参考图的比例并映射到官方 ratio。返回 ratio 字符串或 None"""
     if not image_urls or index >= len(image_urls):
@@ -181,7 +229,10 @@ def auto_detect_ratio(image_urls: list, index: int = 0) -> str:
         return None
     w, h = size
     ratio = ratio_to_supported(w, h)
-    print(f"[INFO] Main reference image: {image_urls[index]} ({w}x{h}) → auto ratio: {ratio}")
+    label = image_urls[index]
+    if label.startswith("data:"):
+        label = label[:48] + "...(data URI)"
+    print(f"[INFO] Main reference image: {label} ({w}x{h}) → auto ratio: {ratio}")
     return ratio
 
 
@@ -752,7 +803,7 @@ Examples:
     p_img = sub.add_parser("image", help=f"Image generation (default: {IMAGE_MODEL})")
     p_img.add_argument("prompt", help="Image prompt")
     p_img.add_argument("--image-url", action="append", dest="image_urls",
-                       help="Input image URL for i2i (can repeat)")
+                       help="Input image for i2i: HTTP(S) URL or LOCAL FILE PATH (auto-converted to base64 Data URI; officially supported). Can repeat")
     p_img.add_argument("--size", default="1K",
                        help="Output size: tier (1K/2K/3K/4K, default: 1K) or exact (1024x768, may be standardized)")
     p_img.add_argument("--ratio", default="auto", help="Aspect ratio: auto (detect from main input image, default), or 1:1, 3:4, 4:3, 16:9, 9:16, 2:3, 3:2, 21:9")
@@ -790,8 +841,8 @@ Examples:
                        help="Aspect ratio: 16:9, 9:16, 1:1, 4:3, 3:4, 21:9 (default: 16:9)")
     p_v25.add_argument("--model", default=VIDEO_V25_FLASH_MODEL,
                        help=f"Video model (default: {VIDEO_V25_FLASH_MODEL}; paid: {VIDEO_V25_MODEL})")
-    p_v25.add_argument("--first-frame", default=None, help="First frame URL (keyframe mode)")
-    p_v25.add_argument("--last-frame", default=None, help="Last frame URL (keyframe mode)")
+    p_v25.add_argument("--first-frame", default=None, help="First frame (keyframe mode): URL or local file path (base64; undocumented for video API, fallback to URL on failure)")
+    p_v25.add_argument("--last-frame", default=None, help="Last frame (keyframe mode): URL or local file path (base64; undocumented for video API, fallback to URL on failure)")
     p_v25.add_argument("--image-url", action="append", dest="image_urls",
                        help="Reference image URL (reference mode, flash max 5)")
     p_v25.add_argument("--audio-url", action="append", dest="audio_urls",
@@ -832,7 +883,7 @@ Examples:
     elif args.command == "image":
         generate_image(
             args.prompt,
-            image_urls=args.image_urls,
+            image_urls=[normalize_image_input(u) for u in (args.image_urls or [])] or None,
             size=args.size,
             ratio=args.ratio,
             no_translate=args.no_translate,
@@ -856,7 +907,7 @@ Examples:
 
         generate_video(
             prompt=args.prompt,
-            image_urls=keyframe_urls or args.image_urls,
+            image_urls=keyframe_urls or [normalize_image_input(u) for u in (args.image_urls or [])] or None,
             mode=mode,
             num_frames=args.num_frames,
             frame_rate=args.frame_rate,
@@ -880,9 +931,9 @@ Examples:
             size=args.size,
             aspect_ratio=args.aspect_ratio,
             model=args.model,
-            first_frame=args.first_frame,
-            last_frame=args.last_frame,
-            image_urls=args.image_urls,
+            first_frame=normalize_image_input(args.first_frame) if args.first_frame else None,
+            last_frame=normalize_image_input(args.last_frame) if args.last_frame else None,
+            image_urls=[normalize_image_input(u) for u in (args.image_urls or [])] or None,
             audio_urls=args.audio_urls,
             seed=args.seed,
             poll=poll_flag,
@@ -897,7 +948,7 @@ Examples:
         smoke_test()
     elif args.command == "vision":
         analyze_image(
-            image_urls=args.image_urls,
+            image_urls=[normalize_image_input(u) for u in (args.image_urls or [])],
             prompt=args.prompt,
             system=args.system,
             max_tokens=args.max_tokens,

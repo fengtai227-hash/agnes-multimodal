@@ -150,7 +150,8 @@ Pure Python standard library (`urllib` + `json` + `argparse`). No `pip install` 
 
 - Tool Calling may be unstable
 - Video generation occasionally returns `division by zero` server errors
-- Image API only accepts HTTP(S) URLs as input (no base64)
+- Image API accepts **both public URLs and base64 Data URIs** as input (official docs: "Supports public URLs or Data URI Base64"); the CLI auto-converts local file paths to Data URIs — no image host needed
+- Video media fields (first_frame/last_frame/images) are only documented for public URLs; local-path base64 is undocumented behavior — fall back to a public URL if it fails
 - Multi-image / keyframe video not fully end-to-end verified
 
 ---

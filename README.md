@@ -160,7 +160,8 @@ python scripts/agnes_client.py translate "一只在月光下散步的猫"
 
 - Tool Calling (function calling) 可能不稳定
 - 视频生成偶有服务端 `division by zero` 错误
-- 图片 API 仅接受 HTTP(S) URL 作为输入，不支持 base64
+- 图片 API 输入**同时支持公网 URL 和 base64 Data URI**（官网 `image` 数组原文 "Supports public URLs or Data URI Base64"）；CLI 的本地文件路径会自动转 Data URI，无需先传图床
+- 视频媒体字段（first_frame/last_frame/images）官网仅背书公网 URL，本地路径转 base64 属未文档化行为，失败请回退公网 URL
 - 多图视频/关键帧动画尚未完整端到端验证
 
 ---

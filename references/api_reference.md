@@ -43,8 +43,9 @@ POST /v1/images/generations
 | `size` | string | no | tier (`1K`/`2K`/`3K`/`4K`, recommended) or exact (`1024x768`, may be standardized) |
 | `ratio` | string | no | aspect ratio: `1:1`/`3:4`/`4:3`/`16:9`/`9:16`/`2:3`/`3:2`/`21:9` (use with tier size) |
 | `extra_body` | object | no | Advanced workflow params |
-| `extra_body.image` | array | no | Input image URLs for i2i |
-| `extra_body.response_format` | string | no | `url` to get accessible URL |
+| `extra_body.image` | array | no | Input images for i2i: public URLs **or Data URI base64** (`data:image/png;base64,...`) — official docs confirm both |
+| `extra_body.response_format` | string | no | `url` or `b64_json` (output format) |
+| `return_base64` | boolean | no | top-level; true → output as base64 (t2i) |
 
 **Pricing**: Currently FREE ($0/image) for both 2.1 & 2.5 flash, all resolution tiers.
 **Note**: `response_format` must NOT be placed at payload top level. Do NOT pass `tags: ["img2img"]`.
@@ -95,9 +96,9 @@ GET  /agnesapi?video_id={id}&model_name={model}  (query status — model_name RE
 | `size` | string | no | flash: only `"720P"`; paid: `"720P"`/`"960P"`/`"2K"` |
 | `aspect_ratio` | string | no | `16:9`(default)/`9:16`/`1:1`/`4:3`/`3:4`/`21:9` |
 | `seed` | int | no | Reproducible results |
-| `first_frame` | string | keyframe | First frame URL (with `last_frame`, at least one required) |
-| `last_frame` | string | keyframe | Last frame URL |
-| `images` | string[] | reference | Reference image URLs (flash max 5) |
+| `first_frame` | string | keyframe | First frame: public URL per official docs (local file → base64 works per community plugins, undocumented; fallback to URL). With `last_frame`, at least one required |
+| `last_frame` | string | keyframe | Last frame: same URL/base64 note as first_frame |
+| `images` | string[] | reference | Reference images (flash max 5). Official docs: public URLs; base64 undocumented |
 | `audios` | string[] | reference | Reference audio URLs (flash max 3) |
 | `videos` | object[] | reference | Reference videos (flash NOT supported; paid only) |
 

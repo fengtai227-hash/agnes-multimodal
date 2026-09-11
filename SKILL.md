@@ -47,8 +47,9 @@ python scripts/agnes_client.py image "A futuristic city at sunset, cinematic rea
 python scripts/agnes_client.py image "一只在月光下散步的猫"
 python scripts/agnes_client.py image "..." --model agnes-image-2.1-flash   # 回退上一代
 
-# 图生图（自动比例检测 — 默认按主参考图比例输出）
+# 图生图（自动比例检测 — 默认按主参考图比例输出；输入支持 URL 或本地文件路径）
 python scripts/agnes_client.py image "Transform to cyberpunk night" --image-url "https://...input.png" --image-url "https://...ref.png"
+python scripts/agnes_client.py image "Transform to cyberpunk night" --image-url "D:\\pics\\model.png"   # 本地路径自动转 base64 Data URI（官网明确支持）
 
 # 图生图 + 手动指定 ratio（不自动检测）
 python scripts/agnes_client.py image "Transform to cyberpunk night" --image-url "https://...input.png" --ratio 16:9
@@ -99,9 +100,9 @@ python scripts/agnes_client.py smoke-test
 
 ### 图生图流程
 
-1. 确认用户提供了输入图片 URL 或本地路径
+1. 确认用户提供了输入图片 URL、Data URI 或本地路径（本地路径会自动转为 base64 Data URI）
 2. 如需翻译提示词，执行翻译
-3. 调用同一 endpoint，在 `extra_body.image` 中传入输入图片 URL 数组
+3. 调用同一 endpoint，在 `extra_body.image` 中传入输入图片数组（URL 或 `data:image/png;base64,...`）
 4. 返回生成结果
 
 ### 视频生成流程（引擎选择）
@@ -143,8 +144,8 @@ Skill 内置两个视频引擎，按需求选择：
 
 `agnes-2.5-flash` 支持 OpenAI Vision API 格式的多模态输入，可分析图片内容并返回文字描述。这是"给不具备视觉能力的模型提供眼睛"的桥接方案。2.5 版本的图像理解能力比 2.0 更强，细节识别更准确。
 
-1. 确保图片已上传到可公网访问的 HTTP(S) URL
-2. 调用 `vision` 命令，传入图片 URL + 可选的分析提示词
+1. 图片可为公网 HTTP(S) URL 或本地路径（本地路径自动转 base64 Data URI，OpenAI Vision 兼容层支持）
+2. 调用 `vision` 命令，传入图片 + 可选的分析提示词
 3. 返回文字描述，可直接作为上下文传给其他模型（如"请对这张图片中的手表设计给出改进建议"——先 vision 获取描述，再传给任意文本模型分析）
 
 Vision 命令参数：
@@ -193,9 +194,17 @@ Vision 命令参数：
 - 2.5 Thinking 模式会返回 `reasoning_content` 字段（思考过程），会增加少量输出 token
 - 视频生成偶有 `division by zero` 服务端错误
 - V2.0 多图视频/关键帧动画尚未完整端到端验证
-- 图片 API 仅接受 HTTP(S) URL 作为输入，不支持 base64（输入），输出可选 URL 或 Base64
+- 图像 API（`/v1/images/generations`）输入**同时支持公网 URL 和 base64 Data URI**（官网文档明确：`image` 数组 "Supports public URLs or Data URI Base64"，本地文件无需再传图床）；输出可选 URL 或 Base64（`return_base64: true` 或 `extra_body.response_format: b64_json`）
+- 视频媒体字段（first_frame/last_frame/images/audios/videos）官网文档仅写公网 URL，且要求 "must be publicly accessible"；脚本对视频帧也支持本地路径转 base64，但属**未文档化行为**（社区 ComfyUI 插件实测可用），失败时请回退公网 URL
+- 视频输入**不支持**传视频文件 base64（videos 字段仅接受带 url 的对象，且 flash 版不支持视频参考）
 - `agnes-video-2.5-flash` 仅 720P，不支持视频参考；需要 960P/2K 或视频参考时用付费 `--model agnes-video-2.5`
 - `video25` 的 keyframe/reference 任务查询必须带 `--model agnes-video-2.5-flash`
+
+## 图生图（i2i）输入格式（2026-09-11 官网查证）
+
+- `extra_body.image` 数组元素可为：`https://...` 公网 URL **或** `data:image/png;base64,...` Data URI（官网 agnes-image-2.0/2.1-flash 文档原文："Supports public URLs or Data URI Base64"）
+- 本技能的 `--image-url` 参数同时接受 URL 和本地文件路径，本地路径自动转 Data URI（含 jpg/png/webp/gif/bmp）
+- 自动比例检测对三种输入形态均有效（Data URI/本地路径直接解码文件头，无需下载）
 
 ## 自动比例检测（i2i）
 
