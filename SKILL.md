@@ -1,8 +1,8 @@
 ---
 name: agnes-multimodal
 description: >
-  Agnes AI 全模态生成技能。覆盖文本生成(agnes-2.5-flash)、文生图/图生图(agnes-image-2.5-flash 最新一代)、
-  双视频引擎(V2.0 t2v/i2v/keyframes 与新一代 agnes-video-2.5-flash text/keyframe/reference)、
+  Agnes AI 全模态生成技能。覆盖文本生成(agnes-2.5-flash / agnes-3.0-flash)、文生图/图生图(agnes-image-2.5-flash 最新一代)、
+  视频生成(agnes-video-2.5-flash，限时免费 720P，text/keyframe/reference 三模式)、
   自动中译英、异步轮询。一个 Skill 全部搞定。 当用户需要 AI 生成文本、图片、视频，或提到
   "Agnes"、"agnes"、"AI 画图"、"AI 生成视频"、 "AI 图片"、"文生图"、"图生图"、"文生视频"、
   "图生视频"、"关键帧动画"、"首尾帧"、"用 Agnes 生成" 时触发。
@@ -15,13 +15,15 @@ description: >
 
 本 Skill 封装了 Agnes AI (Sapiens AI) 的全部生成能力，通过一个 CLI 脚本统一调用：
 
-- **文本生成**: `agnes-2.5-flash`（支持 Thinking 推理模式，$0）
-- **图片理解/Vision**: `agnes-2.5-flash`（OpenAI Vision API 兼容，可分析图片内容）
+- **文本生成**: `agnes-2.5-flash`（默认，支持 Thinking 推理模式，$0）；可选 `agnes-3.0-flash`（512K 上下文，输出上限 65,536，$0）
+- **图片理解/Vision**: `agnes-2.5-flash` / `agnes-3.0-flash`（OpenAI Vision API 兼容；3.0 更快，实测更不易超时）
 - **文生图/图生图**: `agnes-image-2.5-flash`（最新一代，高信息密度优化；可用 `--model agnes-image-2.1-flash` 回退上一代）
-- **视频引擎一 (V2.0)**: `agnes-video-v2.0` — 文生视频 / 图生视频 / 关键帧动画，自由帧率与分辨率，$0/秒
-- **视频引擎二 (Video 2.5 Flash)**: `agnes-video-2.5-flash` — 新一代模型，text/keyframe/reference 三模式，多模态参考，限时免费 720P；付费升级 `--model agnes-video-2.5` 可解锁 960P/2K 与视频参考
+- **视频生成**: `agnes-video-2.5-flash` — **唯一默认引擎**，限时免费 $0/秒（仅 720P），text/keyframe/reference 三模式，支持图片/音频参考
 - **自动翻译**: 中文提示词自动译英文后调用 API
 - **异步轮询**: 视频任务自动轮询直到完成
+
+> ⚠️ **付费模型默认禁用**：`agnes-video-2.5`（$0.025/秒起，**无优惠**）必须显式追加 `--allow-paid` 才会调用，避免误产生费用。
+> 旧的 `agnes-video-v2.0` 引擎已于 2026-09-25 官方下线，本 skill 已彻底移除其入口。
 
 ## 前置条件
 
@@ -41,6 +43,7 @@ description: >
 python scripts/agnes_client.py text "你的提示词"
 python scripts/agnes_client.py text "你好" --stream
 python scripts/agnes_client.py text "帮我写一个快速排序" --thinking  # 2.5 推理模式
+python scripts/agnes_client.py text "复杂推理题" --model agnes-3.0-flash   # 可选 3.0（512K 上下文）
 
 # 文生图（agnes-image-2.5-flash，默认 1K；推荐档位 size + ratio）
 python scripts/agnes_client.py image "A futuristic city at sunset, cinematic realism" --size 2K --ratio 16:9
@@ -54,32 +57,27 @@ python scripts/agnes_client.py image "Transform to cyberpunk night" --image-url 
 # 图生图 + 手动指定 ratio（不自动检测）
 python scripts/agnes_client.py image "Transform to cyberpunk night" --image-url "https://...input.png" --ratio 16:9
 
-# ── 视频引擎一：V2.0（自由帧率/分辨率，$0）──
-python scripts/agnes_client.py video "A drone flying over mountains at sunrise" --poll          # 文生视频
-python scripts/agnes_client.py video "Add motion to this scene" --image-url "https://...frame.png" --poll  # 图生视频
-python scripts/agnes_client.py video --keyframes "https://a.com/1.png,https://a.com/2.png,https://a.com/3.png" --poll  # 关键帧动画
-
-# ── 视频引擎二：Video 2.5 Flash（新一代，免费 720P）──
+# ── 视频生成：Video 2.5 Flash（限时免费，仅 720P）──
 python scripts/agnes_client.py video25 "雨后的未来城市街道，霓虹灯倒影，电影级运镜" --poll          # text 文生视频
 python scripts/agnes_client.py video25 "人物自然转身走向窗边" --first-frame "https://.../f.png" --last-frame "https://.../l.png" --poll  # keyframe 首尾帧
 python scripts/agnes_client.py video25 "以 <Picture 1> 为角色参考在花田奔跑" --image-url "https://.../char.png" --poll  # reference 图片参考
 python scripts/agnes_client.py video25 "跟随 <Audio 1> 节奏生成夜景" --audio-url "https://.../music.mp3" --poll  # reference 音频参考
-python scripts/agnes_client.py video25 "..." --model agnes-video-2.5 --size 960P               # 付费升级（960P/2K）
+python scripts/agnes_client.py video25 "..." --model agnes-video-2.5 --allow-paid --size 1080P  # 付费，需 --allow-paid 确认（$0.040/秒）
 
 # 只提交视频任务不等待
-python scripts/agnes_client.py video "..." --no-poll
 python scripts/agnes_client.py video25 "..." --no-poll
 
-# 查询视频任务状态（V2.5 任务建议带 --model）
+# 查询视频任务状态（2.5 的 keyframe/reference 任务必须带 --model）
 python scripts/agnes_client.py video-status TASK_ID
 python scripts/agnes_client.py video-status TASK_ID --model agnes-video-2.5-flash
 
 # 翻译中文提示词
 python scripts/agnes_client.py translate "一只猫"
 
-# 图片理解 / Vision（用 agnes-2.5-flash 分析图片内容）
+# 图片理解 / Vision（默认 agnes-2.5-flash，可换更快的 agnes-3.0-flash）
 python scripts/agnes_client.py vision --image-url "https://example.com/photo.png"
 python scripts/agnes_client.py vision --image-url "https://example.com/photo.png" --prompt "What brand is this watch?"
+python scripts/agnes_client.py vision --image-url "D:\\pics\\watch.png" --model agnes-3.0-flash
 
 # 冒烟测试（验证 API 连通性）
 python scripts/agnes_client.py smoke-test
@@ -107,12 +105,12 @@ python scripts/agnes_client.py smoke-test
 
 ### 视频生成流程（引擎选择）
 
-Skill 内置两个视频引擎，按需求选择：
+视频生成统一走 `video25` 子命令：
 
-| 引擎 | 子命令 | 模型 | 特点 | 价格 |
-|---|---|---|---|---|
-| V2.0 | `video` | `agnes-video-v2.0` | t2v/ti2vid/keyframes，自由帧率(num_frames 8n+1)与分辨率 | $0/秒 |
-| **Video 2.5** | `video25` | `agnes-video-2.5-flash`（默认）/ `agnes-video-2.5`（付费） | 新一代：text/keyframe/reference，参考图/音频，更可控镜头 | flash 限时免费 |
+| 模型 | `--model` | 特点 | 价格 |
+|---|---|---|---|
+| **Video 2.5 Flash**（默认） | `agnes-video-2.5-flash` | text/keyframe/reference 三模式，参考图(≤5)/音频(≤3)，镜头可控 | **限时免费 $0/秒**（仅 720P） |
+| Video 2.5（付费） | `agnes-video-2.5` + `--allow-paid` | 同上，另支持 1080P/1K/2K 与视频参考 | $0.025~$0.055/秒，**无优惠** |
 
 **Video 2.5 Flash（`video25`）工作流：**
 
@@ -124,25 +122,19 @@ Skill 内置两个视频引擎，按需求选择：
 3. 轮询 `GET /agnesapi?video_id=<ID>&model_name=agnes-video-2.5-flash`（keyframe/reference 必须带 model_name）
 4. 状态 `completed` 后从响应提取视频 URL
 
-> ⚠️ `video25` 与 `video` 参数体系完全不同：`video25` 不接受 num_frames/width/height/fps/negative_prompt（会返回 400）。
+> ⚠️ `video25` 使用 2.5 参数体系（seconds/mode/aspect_ratio/size），不接受 num_frames/width/height/fps/negative_prompt 等旧 V2.0 参数（会返回 400）。
 
-### 视频参数约束（引擎一 V2.0）
-
-- `num_frames` 必须满足 `8n + 1`，最大 441
-- 默认: `num_frames=121, frame_rate=24`（约 5 秒）
-- 快速测试用 `--num-frames 81`（约 3.4 秒）
-
-### 视频参数约束（引擎二 Video 2.5）
+### 视频参数约束（Video 2.5）
 
 - `seconds` 为字符串 `"4"`~`"12"`，默认 `"5"`
-- `size`：flash 固定 `720P`；付费模型 `agnes-video-2.5` 可选 `720P`/`960P`/`2K`
+- `size`：flash 固定 `720P`（唯一免费档位）；付费模型 `agnes-video-2.5` 可选 `720P`/`1080P`/`1K`/`2K`（旧 `960P` 已废弃）
 - `aspect_ratio`：`21:9` / `16:9`(默认) / `4:3` / `1:1` / `3:4` / `9:16`
 - flash 限制：参考图片 ≤5 张、音频 ≤3 段、**不支持视频参考**（付费版支持 `videos`）
 - 实测 720P 16:9 输出约 1280x704
 
 ### 图片理解 (Vision) 流程
 
-`agnes-2.5-flash` 支持 OpenAI Vision API 格式的多模态输入，可分析图片内容并返回文字描述。这是"给不具备视觉能力的模型提供眼睛"的桥接方案。2.5 版本的图像理解能力比 2.0 更强，细节识别更准确。
+`agnes-2.5-flash` / `agnes-3.0-flash` 支持 OpenAI Vision API 格式的多模态输入，可分析图片内容并返回文字描述。这是"给不具备视觉能力的模型提供眼睛"的桥接方案。**3.0-flash 实测图像输入更快、更不易超时**（2.5-flash 的 vision 端点此前多次超时），可用 `--model agnes-3.0-flash` 切换。
 
 1. 图片可为公网 HTTP(S) URL 或本地路径（本地路径自动转 base64 Data URI，OpenAI Vision 兼容层支持）
 2. 调用 `vision` 命令，传入图片 + 可选的分析提示词
@@ -153,6 +145,7 @@ Vision 命令参数：
 - `--prompt`（可选）: 分析提示词，默认 "Describe this image in detail."
 - `--system`（可选）: 系统提示词
 - `--max-tokens`（可选）: 最大输出 tokens，默认 1000
+- `--model`（可选）: 视觉模型，默认 `agnes-2.5-flash`；可换 `agnes-3.0-flash`（更快）
 - `--no-translate`（可选）: 跳过自动翻译（英文 prompt 建议使用）
 
 ## 提示词最佳实践
@@ -180,12 +173,12 @@ Vision 命令参数：
 
 | 模型 | 定价 |
 |------|------|
-| `agnes-2.5-flash` (文本/Vision/推理) | **免费** ($0/1M tokens) |
+| `agnes-2.5-flash` (文本/Vision/推理，默认) | **免费** ($0/1M tokens) |
+| `agnes-3.0-flash` (文本/Vision，可选) | **免费** ($0/1M tokens，512K 上下文) |
 | `agnes-image-2.5-flash` (图片，最新一代) | **免费** ($0/图，所有 1K~4K 档位) |
 | `agnes-image-2.1-flash` (图片，上一代) | **免费** ($0/图) |
-| `agnes-video-v2.0` (视频引擎一) | **免费** ($0/秒) |
-| `agnes-video-2.5-flash` (视频引擎二) | **限时免费** ($0/秒, 720P) |
-| `agnes-video-2.5` (视频，付费升级) | $0.025/秒(720P) / $0.040/秒(960P) / $0.055/秒(2K) |
+| `agnes-video-2.5-flash` (视频，**默认**) | **限时免费** ($0/秒, 仅 720P) |
+| `agnes-video-2.5` (视频，付费，需 `--allow-paid`) | $0.025/秒(720P) / $0.040/秒(1080P、1K) / $0.055/秒(2K) |
 
 > 价格以官网 https://www.agnes-ai.com/zh-Hans/docs/pricing 为准，免费政策可能随平台公告调整。
 
@@ -193,11 +186,11 @@ Vision 命令参数：
 
 - 2.5 Thinking 模式会返回 `reasoning_content` 字段（思考过程），会增加少量输出 token
 - 视频生成偶有 `division by zero` 服务端错误
-- V2.0 多图视频/关键帧动画尚未完整端到端验证
+- `agnes-video-v2.0` 已于 2026-09-25 官方下线，本 skill 已彻底移除其入口（API 侧虽仍能出片，但无文档承诺，不应再使用）
 - 图像 API（`/v1/images/generations`）输入**同时支持公网 URL 和 base64 Data URI**（官网文档明确：`image` 数组 "Supports public URLs or Data URI Base64"，本地文件无需再传图床）；输出可选 URL 或 Base64（`return_base64: true` 或 `extra_body.response_format: b64_json`）
 - 视频媒体字段（first_frame/last_frame/images/audios/videos）官网文档仅写公网 URL，且要求 "must be publicly accessible"；脚本对视频帧也支持本地路径转 base64，但属**未文档化行为**（社区 ComfyUI 插件实测可用），失败时请回退公网 URL
 - 视频输入**不支持**传视频文件 base64（videos 字段仅接受带 url 的对象，且 flash 版不支持视频参考）
-- `agnes-video-2.5-flash` 仅 720P，不支持视频参考；需要 960P/2K 或视频参考时用付费 `--model agnes-video-2.5`
+- `agnes-video-2.5-flash` 仅 720P，不支持视频参考；确需 1080P/1K/2K 或视频参考时，用付费 `--model agnes-video-2.5 --allow-paid`
 - `video25` 的 keyframe/reference 任务查询必须带 `--model agnes-video-2.5-flash`
 
 ## 图生图（i2i）输入格式（2026-09-11 官网查证）

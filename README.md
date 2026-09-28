@@ -12,14 +12,14 @@
 
 | 能力 | 模型 | 状态 |
 |------|------|:--:|
-| 📝 文本生成 | `agnes-2.5-flash` | ✅ |
+| 📝 文本生成 | `agnes-2.5-flash` (可选 `agnes-3.0-flash`) | ✅ |
 | 🧠 推理模式 (Thinking) | `agnes-2.5-flash` | ✅ |
 | 🖼️ 文生图 | `agnes-image-2.5-flash` (可回退 2.1) | ✅ |
 | 🔄 图生图 | `agnes-image-2.5-flash` (自动比例) | ✅ |
-| 👁️ 图片理解 (Vision) | `agnes-2.5-flash` | ✅ |
-| 🎬 文生视频 | `agnes-video-v2.0` / `agnes-video-2.5-flash` | ✅ |
-| 🎞️ 图生视频 | `agnes-video-v2.0` (ti2vid) / `video25 --image-url` (reference) | ✅ |
-| 🔗 关键帧/首尾帧 | `agnes-video-v2.0` (keyframes) / `video25 --first/last-frame` | ✅ |
+| 👁️ 图片理解 (Vision) | `agnes-2.5-flash` / `agnes-3.0-flash` | ✅ |
+| 🎬 文生视频 | `agnes-video-2.5-flash` (text，免费 720P) | ✅ |
+| 🎞️ 图生视频 / 参考图 | `video25 --image-url` (reference) | ✅ |
+| 🔗 关键帧/首尾帧 | `video25 --first/last-frame` | ✅ |
 | 🌐 自动中译英 | `agnes-2.5-flash` | ✅ |
 | ⏳ 异步轮询 | — | ✅ |
 
@@ -80,6 +80,7 @@ python scripts/agnes_client.py smoke-test
 python scripts/agnes_client.py text "解释量子计算"
 python scripts/agnes_client.py text "你好" --stream
 python scripts/agnes_client.py text "帮我调试这段代码" --thinking  # 2.5 推理模式
+python scripts/agnes_client.py text "复杂推理题" --model agnes-3.0-flash  # 可选 3.0（512K 上下文）
 
 # 文生图（支持档位式尺寸 + 宽高比）
 python scripts/agnes_client.py image "A futuristic city at sunset, cinematic" --size 2K --ratio 16:9
@@ -92,21 +93,22 @@ python scripts/agnes_client.py image "Transform to cyberpunk night" --image-url 
 # 图片理解 / Vision
 python scripts/agnes_client.py vision --image-url "https://example.com/photo.png"
 python scripts/agnes_client.py vision --image-url URL --prompt "这是什么品牌的手表？"
+python scripts/agnes_client.py vision --image-url "D:\\pics\\watch.png" --model agnes-3.0-flash  # 更快
 
-# 文生视频
-python scripts/agnes_client.py video "A drone flying over mountains at sunrise" --poll
+# 文生视频（默认免费引擎 Video 2.5 Flash，720P）
+python scripts/agnes_client.py video25 "A drone flying over mountains at sunrise" --poll
 
-# 图生视频
-python scripts/agnes_client.py video "Add gentle motion to this scene" --image-url "https://example.com/frame.png" --poll
+# 参考图生成（提示词用 <Picture N> 指代素材）
+python scripts/agnes_client.py video25 "以 <Picture 1> 的角色为参考在花田奔跑" --image-url "https://example.com/char.png" --poll
 
-# 关键帧动画
-python scripts/agnes_client.py video --keyframes "https://a.com/1.png,https://a.com/2.png,https://a.com/3.png" --poll
+# 首尾帧控制
+python scripts/agnes_client.py video25 "角色自然转身走向窗边" --first-frame "https://a.com/f.png" --last-frame "https://a.com/l.png" --poll
 
 # 只提交不等待
-python scripts/agnes_client.py video "..." --no-poll
+python scripts/agnes_client.py video25 "..." --no-poll
 
-# 查询视频状态
-python scripts/agnes_client.py video-status TASK_ID
+# 查询视频状态（keyframe/reference 任务必须带 --model）
+python scripts/agnes_client.py video-status TASK_ID --model agnes-video-2.5-flash
 
 # 中译英
 python scripts/agnes_client.py translate "一只在月光下散步的猫"
@@ -118,7 +120,7 @@ python scripts/agnes_client.py translate "一只在月光下散步的猫"
 
 ### 👁️ Vision 桥接 — 给任意模型"看"图片
 
-`agnes-2.5-flash` 支持 OpenAI Vision API 格式。通过 `vision` 命令，可以先将图片转为文字描述，再传给任意不具备视觉能力的模型：
+`agnes-2.5-flash` / `agnes-3.0-flash` 支持 OpenAI Vision API 格式。通过 `vision` 命令，可以先将图片转为文字描述，再传给任意不具备视觉能力的模型（3.0-flash 更快，实测更不易超时）：
 
 ```
 图片 → vision 命令 → 文字描述 → 任意文本模型继续分析
@@ -138,9 +140,11 @@ python scripts/agnes_client.py translate "一只在月光下散步的猫"
 
 | 参数 | 约束 |
 |------|------|
-| `num_frames` | **必须**满足 `8n + 1`，最大 441 |
-| 默认帧数 | 121（约 5 秒 @ 24fps） |
-| 快速测试 | `--num-frames 81`（约 3.4 秒） |
+| 引擎 | `agnes-video-2.5-flash`（默认，免费，仅 720P） |
+| `seconds` | 字符串 `"4"`~`"12"`，默认 `"5"` |
+| `size` | flash 固定 `720P`；付费 `agnes-video-2.5` 可选 `720P`/`1080P`/`1K`/`2K` |
+| `aspect_ratio` | `21:9` / `16:9`(默认) / `4:3` / `1:1` / `3:4` / `9:16` |
+| flash 限制 | 参考图 ≤5 张、音频 ≤3 段、不支持视频参考 |
 | 轮询超时 | 默认 600s |
 
 ---
@@ -149,10 +153,11 @@ python scripts/agnes_client.py translate "一只在月光下散步的猫"
 
 | 模型 | 定价 |
 |------|------|
-| `agnes-2.5-flash` (文本/Vision) | 免费 |
+| `agnes-2.5-flash` (文本/Vision，默认) | 免费 |
+| `agnes-3.0-flash` (文本/Vision，可选) | 免费 (512K 上下文) |
 | `agnes-image-2.5-flash` / `agnes-image-2.1-flash` (图片) | **免费** |
-| `agnes-video-v2.0` (视频 V2.0) | **免费** |
-| `agnes-video-2.5-flash` (新一代视频) | **限时免费** (720P) |
+| `agnes-video-2.5-flash` (视频，**默认**) | **限时免费** (仅 720P) |
+| `agnes-video-2.5` (视频，付费，需 `--allow-paid`) | $0.025/秒(720P) / $0.040/秒(1080P、1K) / $0.055/秒(2K) |
 
 ---
 
@@ -162,7 +167,8 @@ python scripts/agnes_client.py translate "一只在月光下散步的猫"
 - 视频生成偶有服务端 `division by zero` 错误
 - 图片 API 输入**同时支持公网 URL 和 base64 Data URI**（官网 `image` 数组原文 "Supports public URLs or Data URI Base64"）；CLI 的本地文件路径会自动转 Data URI，无需先传图床
 - 视频媒体字段（first_frame/last_frame/images）官网仅背书公网 URL，本地路径转 base64 属未文档化行为，失败请回退公网 URL
-- 多图视频/关键帧动画尚未完整端到端验证
+- `agnes-video-v2.0` 已于 2026-09-25 官方下线，本 skill 已彻底移除其入口
+- 付费视频模型 `agnes-video-2.5` 默认被拦截，须显式 `--allow-paid` 才会调用
 
 ---
 

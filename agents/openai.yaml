@@ -4,50 +4,50 @@ interface:
   display_name: "Agnes AI Multimodal"
   short_description: >
     Call Agnes AI generation APIs for text, image recognition, image generation,
-    image editing, video generation, keyframe animation, and prompt translation.
-    Supports agnes-2.5-flash (text/vision), agnes-image-2.5-flash (image),
-    agnes-video-v2.0 (video engine 1), agnes-video-2.5-flash (video engine 2).
+    image editing, video generation, keyframe control, and prompt translation.
+    Supports agnes-2.5-flash / agnes-3.0-flash (text/vision), agnes-image-2.5-flash (image),
+    agnes-video-2.5-flash (video, free 720P default).
   default_prompt: >
     Use Agnes AI to generate text, analyze images (Vision), create images,
     generate videos, or translate prompts. Always read the user's intent
     and choose the appropriate subcommand:
 
-    - text → text generation / chat
-    - vision → image recognition / understanding
+    - text → text generation / chat (optional --model agnes-3.0-flash)
+    - vision → image recognition / understanding (optional --model agnes-3.0-flash)
     - image → text-to-image or image-to-image
-    - video → text-to-video / image-to-video / keyframe animation (V2.0 engine)
-    - video25 → next-gen text/keyframe/reference video (agnes-video-2.5-flash)
+    - video25 → text / keyframe / reference video (agnes-video-2.5-flash, free 720P)
     - translate → Chinese-to-English prompt translation
     - video-status → check video generation progress
     - smoke-test → verify API connectivity
 
-    When image input URLs are needed, remind the user that local images
-    must be uploaded to a public HTTP(S) URL first.
+    IMPORTANT: the default video engine is the FREE agnes-video-2.5-flash (720P only).
+    The paid agnes-video-2.5 is refused unless the user explicitly passes --allow-paid.
+
+    Image input accepts a public HTTP(S) URL OR a local file path (auto-converted
+    to a base64 Data URI) — no image host upload is required.
 
 tools:
   - name: agnes_text
     command: python scripts/agnes_client.py text
-    description: Generate text using agnes-2.5-flash
+    description: Generate text using agnes-2.5-flash (optional --model agnes-3.0-flash)
 
   - name: agnes_vision
     command: python scripts/agnes_client.py vision
-    description: Analyze / understand an image using agnes-2.5-flash Vision API
+    description: Analyze / understand an image using the Vision API (default agnes-2.5-flash, optional agnes-3.0-flash)
 
   - name: agnes_image
     command: python scripts/agnes_client.py image
     description: Generate or edit an image using agnes-image-2.5-flash (add --model agnes-image-2.1-flash for legacy)
 
-  - name: agnes_video
-    command: python scripts/agnes_client.py video
-    description: Create a video from text, image, or keyframes using agnes-video-v2.0 (engine 1, free)
-
   - name: agnes_video25
     command: python scripts/agnes_client.py video25
-    description: Create next-gen video (text/keyframe/reference) using agnes-video-2.5-flash (engine 2, free 720P); paid upgrade via --model agnes-video-2.5
+    description: >
+      Create video with the 2.5 engine — default agnes-video-2.5-flash (limited-time FREE, 720P only).
+      Paid agnes-video-2.5 requires an explicit --allow-paid flag.
 
   - name: agnes_video_status
     command: python scripts/agnes_client.py video-status
-    description: Check the status of a video generation task (add --model for 2.5 engine tasks)
+    description: Check the status of a video generation task (add --model for keyframe/reference 2.5 tasks)
 
   - name: agnes_translate
     command: python scripts/agnes_client.py translate
@@ -56,4 +56,3 @@ tools:
   - name: agnes_smoke_test
     command: python scripts/agnes_client.py smoke-test
     description: Run a quick API connectivity test
-

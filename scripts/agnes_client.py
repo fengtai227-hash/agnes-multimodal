@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
 Agnes AI Multimodal Client — 全模态 API 客户端
-覆盖：文本生成 / 文生图 / 图生图 / 视频生成(V2.0 与 V2.5 Flash 双引擎) / 关键帧动画 / 自动翻译 / 轮询
+覆盖：文本生成 / 文生图 / 图生图 / 视频生成(Video 2.5 Flash) / 首尾帧控制 / 参考生成 / 自动翻译 / 轮询
 
 使用方法：
   python agnes_client.py text "你的问题"
+  python agnes_client.py text "复杂推理题" --model agnes-3.0-flash
   python agnes_client.py image "A futuristic city" --size 2K --ratio 16:9
   python agnes_client.py image "一只猫" --image-url "https://example.com/input.png"
-  # 视频引擎一：V2.0（默认 5s，自由帧率/分辨率）
-  python agnes_client.py video "A sunset over mountains" --poll
-  python agnes_client.py video "一段视频" --image-url "https://example.com/frame1.png" --poll
-  python agnes_client.py video --keyframes "https://a.com/1.png,https://a.com/2.png" --poll
-  # 视频引擎二：Video 2.5 Flash（新一代，text/keyframe/reference 三模式，免费 720P）
+  # 视频：Video 2.5 Flash（限时免费，仅 720P；text/keyframe/reference 三模式）
   python agnes_client.py video25 "雨后的未来城市街道，霓虹灯倒影，电影级运镜" --poll
   python agnes_client.py video25 "人物自然转身走向窗边" --first-frame "https://a.com/first.png" --last-frame "https://a.com/last.png" --poll
   python agnes_client.py video25 "以 <Picture 1> 的角色为参考，在花田中奔跑" --image-url "https://a.com/char.png" --poll
-  python agnes_client.py video-status TASK_ID [--model agnes-video-2.5-flash]
+  python agnes_client.py video-status TASK_ID --model agnes-video-2.5-flash
   python agnes_client.py translate "一只在月光下散步的猫"
   python agnes_client.py smoke-test
+
+注意：付费视频模型 agnes-video-2.5（$0.025/秒起，无优惠）默认禁用；
+      必须显式追加 --allow-paid 才会调用，避免误产生费用。
 """
 
 import argparse
@@ -48,12 +48,13 @@ if API_KEY == "YOUR_AGNES_API_KEY_HERE":
 # ============================================================
 # 模型常量（2026-09 官网最新免费模型）
 # ============================================================
-TEXT_MODEL = "agnes-2.5-flash"          # 文本/推理/Vision，$0
+TEXT_MODEL = "agnes-2.5-flash"          # 文本/推理/Vision 默认模型，$0
+TEXT_MODEL_30 = "agnes-3.0-flash"       # 新一代文本/Vision（512K 上下文，输出上限 65,536，$0）— 可选
 IMAGE_MODEL = "agnes-image-2.5-flash"   # 最新一代图像模型（默认，$0），可用 --model 回退 agnes-image-2.1-flash
 IMAGE_MODEL_LEGACY = "agnes-image-2.1-flash"  # 上一代图像模型（$0）
-VIDEO_V20_MODEL = "agnes-video-v2.0"    # 视频引擎一：V2.0（t2v/ti2vid/keyframes，$0/秒）
-VIDEO_V25_FLASH_MODEL = "agnes-video-2.5-flash"  # 视频引擎二：新一代限时免费（仅 720P）
-VIDEO_V25_MODEL = "agnes-video-2.5"     # 新一代付费版（960P/2K、支持视频参考）
+VIDEO_V25_FLASH_MODEL = "agnes-video-2.5-flash"  # 唯一默认视频引擎：限时免费 $0/秒（仅 720P）
+VIDEO_V25_MODEL = "agnes-video-2.5"     # 付费视频模型（$0.025/秒起，无优惠）— 需 --allow-paid 显式解锁
+VIDEO_V25_PAID_SIZES = ("720P", "1080P", "1K", "2K")  # 付费模型可选档位（旧 960P 已废弃）
 
 
 def api_post(endpoint: str, payload: dict, timeout: int = 120) -> dict:
@@ -69,6 +70,10 @@ def api_post(endpoint: str, payload: dict, timeout: int = 120) -> dict:
         return {"error": True, "status": e.code, "body": body}
     except urllib.error.URLError as e:
         return {"error": True, "reason": str(e.reason)}
+    except TimeoutError:
+        return {"error": True, "reason": f"request timed out after {timeout}s"}
+    except OSError as e:
+        return {"error": True, "reason": f"{type(e).__name__}: {e}"}
 
 
 def api_get(endpoint: str, timeout: int = 30) -> dict:
@@ -83,6 +88,10 @@ def api_get(endpoint: str, timeout: int = 30) -> dict:
         return {"error": True, "status": e.code, "body": body}
     except urllib.error.URLError as e:
         return {"error": True, "reason": str(e.reason)}
+    except TimeoutError:
+        return {"error": True, "reason": f"request timed out after {timeout}s"}
+    except OSError as e:
+        return {"error": True, "reason": f"{type(e).__name__}: {e}"}
 
 
 def api_get_raw(path: str, timeout: int = 30) -> dict:
@@ -97,6 +106,10 @@ def api_get_raw(path: str, timeout: int = 30) -> dict:
         return {"error": True, "status": e.code, "body": body}
     except urllib.error.URLError as e:
         return {"error": True, "reason": str(e.reason)}
+    except TimeoutError:
+        return {"error": True, "reason": f"request timed out after {timeout}s"}
+    except OSError as e:
+        return {"error": True, "reason": f"{type(e).__name__}: {e}"}
 
 
 # ============================================================
@@ -273,15 +286,19 @@ def translate_to_english(text: str) -> str:
 # ============================================================
 # 文本生成
 # ============================================================
-def generate_text(prompt: str, stream: bool = False, system: str = None, thinking: bool = False, max_tokens: int = 8192):
-    """文本生成 — agnes-2.5-flash（支持 Thinking 推理模式）"""
+def generate_text(prompt: str, stream: bool = False, system: str = None, thinking: bool = False,
+                  max_tokens: int = 8192, model: str = TEXT_MODEL):
+    """文本生成 — 默认 agnes-2.5-flash（$0）；可 --model agnes-3.0-flash（512K 上下文，$0）
+
+    2.5-flash 支持 Thinking 推理模式（--thinking）。
+    """
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
 
     payload = {
-        "model": "agnes-2.5-flash",
+        "model": model,
         "messages": messages,
         "temperature": 0.7,
         "max_tokens": max_tokens,
@@ -384,80 +401,8 @@ def generate_image(
 
 
 # ============================================================
-# 视频生成
+# 视频任务轮询 / 状态查询（供 video25 使用）
 # ============================================================
-def generate_video(
-    prompt: str = None,
-    image_urls: list = None,
-    mode: str = "t2v",          # t2v / ti2vid / keyframes
-    num_frames: int = 121,
-    frame_rate: int = 24,
-    width: int = None,
-    height: int = None,
-    seed: int = None,
-    negative_prompt: str = None,
-    num_inference_steps: int = None,
-    poll: bool = True,
-    no_translate: bool = False,
-):
-    """视频生成 — 文生视频 / 图生视频 / 关键帧动画
-
-    支持 V2.0 新参数:
-      - width/height: 分辨率（自动标准化到 480p/720p/1080p 档位）
-      - seed: 随机种子，可复现结果
-      - negative_prompt: 反向提示词，避免不需要的内容
-      - num_inference_steps: 推理步数
-    """
-    if prompt and not no_translate and _needs_translation(prompt):
-        prompt = translate_to_english(prompt)
-
-    payload = {
-        "model": "agnes-video-v2.0",
-        "num_frames": num_frames,
-        "frame_rate": frame_rate,
-    }
-
-    if width:
-        payload["width"] = width
-    if height:
-        payload["height"] = height
-    if seed is not None:
-        payload["seed"] = seed
-    if negative_prompt:
-        payload["negative_prompt"] = negative_prompt
-    if num_inference_steps:
-        payload["num_inference_steps"] = num_inference_steps
-
-    if prompt:
-        payload["prompt"] = prompt
-    if image_urls:
-        if mode == "keyframes":
-            payload["image"] = image_urls
-            payload["mode"] = "keyframes"
-        else:
-            # ti2vid: 取第一张作起始帧
-            payload["image"] = image_urls[0]
-            payload["mode"] = "ti2vid"
-
-    print(f"[INFO] Creating video task... (num_frames={num_frames}, fps={frame_rate}, mode={mode})", file=sys.stderr)
-    result = api_post("/v1/videos", payload, timeout=30)
-    if result.get("error"):
-        print(f"ERROR: {json.dumps(result, ensure_ascii=False, indent=2)}", file=sys.stderr)
-        sys.exit(1)
-
-    task_id = result.get("task_id") or result.get("id")
-    if not task_id:
-        print(f"ERROR: No task_id in response: {json.dumps(result, ensure_ascii=False)}", file=sys.stderr)
-        sys.exit(1)
-
-    print(f"[INFO] Video task created: {task_id}", file=sys.stderr)
-
-    if poll:
-        poll_video(task_id)
-    else:
-        print(json.dumps({"task_id": task_id, "status": "submitted"}, ensure_ascii=False, indent=2))
-
-
 def poll_video(task_id: str, max_wait: int = 600, interval: int = 5, model_name: str = None):
     """轮询视频任务直到完成（优先 video_id 新接口，回退 task_id 旧接口）
 
@@ -531,9 +476,10 @@ def generate_video_v25(
     prompt: str = None,
     mode: str = "auto",   # auto / text / keyframe / reference
     seconds: str = "5",   # "4"-"12"，字符串
-    size: str = "720P",   # 2.5-flash 固定 720P；agnes-video-2.5 可选 720P/960P/2K
+    size: str = "720P",   # 2.5-flash 固定 720P；付费 2.5 可选 720P/1080P/1K/2K
     aspect_ratio: str = "16:9",
     model: str = VIDEO_V25_FLASH_MODEL,
+    allow_paid: bool = False,   # 付费模型 agnes-video-2.5 需显式置 True 才放行
     first_frame: str = None,
     last_frame: str = None,
     image_urls: list = None,
@@ -542,16 +488,25 @@ def generate_video_v25(
     poll: bool = True,
     no_translate: bool = False,
 ):
-    """新一代视频生成 — agnes-video-2.5-flash（限时免费）/ agnes-video-2.5（付费）
+    """视频生成 — 默认 agnes-video-2.5-flash（限时免费 $0/秒，仅 720P）
+
+    付费模型 agnes-video-2.5（$0.025/秒起，无优惠）默认禁用，需 allow_paid=True 才可使用。
 
     模式（mode="auto" 时按素材自动推断）:
       - text:       纯文本生成视频
       - keyframe:   首帧/尾帧控制起止构图（--first-frame / --last-frame，至少一个）
       - reference:  参考图片/音频生成（--image-url 最多5张 / --audio-url 最多3段；Flash 不支持视频参考）
-
-    与 V2.0 引擎差异：参数体系完全不同（seconds/mode/aspect_ratio/size），
-    不支持 num_frames/width/height/negative_prompt 等 V2.0 参数（会返回 400）。
     """
+    # ---- 付费模型保护：默认禁用，必须显式解锁 ----
+    if model == VIDEO_V25_MODEL and not allow_paid:
+        print("ERROR: agnes-video-2.5 是付费模型（720P $0.025/秒、1080P/1K $0.040/秒、2K $0.055/秒，无优惠）。", file=sys.stderr)
+        print("       本 skill 默认使用免费的 agnes-video-2.5-flash（720P，限时 $0/秒）。", file=sys.stderr)
+        print("       如确需付费模型，请显式追加 --allow-paid 以确认承担费用。", file=sys.stderr)
+        sys.exit(1)
+    if model not in (VIDEO_V25_FLASH_MODEL, VIDEO_V25_MODEL):
+        print(f"ERROR: unknown video model '{model}' (expected {VIDEO_V25_FLASH_MODEL} or {VIDEO_V25_MODEL})", file=sys.stderr)
+        sys.exit(1)
+
     if prompt and not no_translate and _needs_translation(prompt):
         prompt = translate_to_english(prompt)
 
@@ -594,6 +549,9 @@ def generate_video_v25(
                 sys.exit(1)
     if model == VIDEO_V25_FLASH_MODEL and size != "720P":
         print("ERROR: agnes-video-2.5-flash 仅支持 size=720P（flash 限制）", file=sys.stderr)
+        sys.exit(1)
+    if model == VIDEO_V25_MODEL and size not in VIDEO_V25_PAID_SIZES:
+        print(f"ERROR: agnes-video-2.5 的 size 必须是 {' / '.join(VIDEO_V25_PAID_SIZES)}（旧 960P 档位已废弃）", file=sys.stderr)
         sys.exit(1)
 
     # ---- 构建 payload ----
@@ -657,6 +615,8 @@ def smoke_test():
     })
     if result.get("error"):
         print(f"  FAIL: {result}", file=sys.stderr)
+        if "timed out" in str(result.get("reason", "")):
+            print(f"  HINT: {TEXT_MODEL} 响应偶发偏慢，可重试或改用 --model {TEXT_MODEL_30}（实测更快）", file=sys.stderr)
     else:
         try:
             text = result["choices"][0]["message"]["content"]
@@ -721,8 +681,9 @@ def analyze_image(
     system: str = None,
     max_tokens: int = 1000,
     no_translate: bool = False,
+    model: str = TEXT_MODEL,
 ):
-    """图片理解 — 使用 agnes-2.5-flash 的视觉能力分析图片"""
+    """图片理解 — 默认 agnes-2.5-flash；可 --model agnes-3.0-flash（更快，实测更不易超时）"""
     if not no_translate and _needs_translation(prompt):
         prompt = translate_to_english(prompt)
 
@@ -737,7 +698,7 @@ def analyze_image(
     messages.append({"role": "user", "content": content})
 
     payload = {
-        "model": "agnes-2.5-flash",
+        "model": model,
         "messages": messages,
         "max_tokens": max_tokens,
         "temperature": 0.3,
@@ -775,18 +736,19 @@ def main():
         epilog="""
 Examples:
   agnes_client.py text "Explain quantum computing in simple terms"
-  agnes_client.py text "你好" --stream
+  agnes_client.py text "复杂推理题" --model agnes-3.0-flash
   agnes_client.py image "A futuristic city at sunset, cinematic" --size 2K --ratio 16:9
   agnes_client.py image "一只猫" --image-url "https://example.com/input.png"
-  agnes_client.py video "A drone flying over mountains" --poll
-  agnes_client.py video "一段场景" --image-url "https://example.com/frame.png" --poll
-  agnes_client.py video --keyframes "https://a.com/1.png,https://a.com/2.png" --poll
   agnes_client.py video25 "雨后的未来城市街道，电影级运镜" --poll
   agnes_client.py video25 "人物转身走向窗边" --first-frame "https://a.com/f.png" --last-frame "https://a.com/l.png" --poll
   agnes_client.py video25 "以 <Picture 1> 为参考，角色在花田奔跑" --image-url "https://a.com/c.png" --poll
   agnes_client.py video-status TASK_ID --model agnes-video-2.5-flash
   agnes_client.py translate "一只在月光下散步的猫"
   agnes_client.py smoke-test
+
+Note:
+  Video default engine is agnes-video-2.5-flash (limited-time FREE, 720P only).
+  The paid agnes-video-2.5 ($0.025/s and up, no discount) is blocked unless --allow-paid is given.
         """,
     )
     sub = parser.add_subparsers(dest="command", help="Sub-command")
@@ -798,6 +760,8 @@ Examples:
     p_text.add_argument("--system", help="System prompt", default=None)
     p_text.add_argument("--thinking", action="store_true", help="Enable Thinking mode (better for coding/reasoning)")
     p_text.add_argument("--max-tokens", type=int, default=8192, help="Max output tokens (default: 8192)")
+    p_text.add_argument("--model", default=TEXT_MODEL,
+                        help=f"Text model (default: {TEXT_MODEL}; optional: {TEXT_MODEL_30})")
 
     # image
     p_img = sub.add_parser("image", help=f"Image generation (default: {IMAGE_MODEL})")
@@ -811,36 +775,22 @@ Examples:
                        help=f"Image model (default: {IMAGE_MODEL}; legacy: {IMAGE_MODEL_LEGACY})")
     p_img.add_argument("--no-translate", action="store_true", help="Skip auto-translation")
 
-    # video (V2.0 engine)
-    p_vid = sub.add_parser("video", help=f"Video generation V2.0 engine ({VIDEO_V20_MODEL})")
-    p_vid.add_argument("prompt", nargs="?", help="Video prompt")
-    p_vid.add_argument("--image-url", action="append", dest="image_urls",
-                       help="Input image URL for i2v (can repeat)")
-    p_vid.add_argument("--keyframes", help="Comma-separated keyframe URLs")
-    p_vid.add_argument("--num-frames", type=int, default=121, help="Frame count (8n+1, max 441, default: 121)")
-    p_vid.add_argument("--frame-rate", type=int, default=24, help="Frame rate FPS 1-60 (default: 24)")
-    p_vid.add_argument("--width", type=int, default=None, help="Video width (auto-mapped to 480p/720p/1080p preset)")
-    p_vid.add_argument("--height", type=int, default=None, help="Video height (auto-mapped to preset)")
-    p_vid.add_argument("--seed", type=int, default=None, help="Random seed for reproducible results")
-    p_vid.add_argument("--negative-prompt", default=None, help="Negative prompt (what to avoid)")
-    p_vid.add_argument("--steps", type=int, default=None, dest="num_inference_steps",
-                       help="Number of inference steps")
-    p_vid.add_argument("--poll", action="store_true", default=True, help="Wait for completion")
-    p_vid.add_argument("--no-poll", action="store_true", help="Submit only, don't wait")
-    p_vid.add_argument("--no-translate", action="store_true", help="Skip auto-translation")
-
-    # video25 (Video 2.5 / 2.5 Flash engine)
+    # video25 (Video 2.5 Flash engine)
+    # 注意：旧的 video(V2.0) 子命令已彻底移除 —— Agnes Video v2.0 于 2026-09-25 23:59:59 (UTC+8) 官方下线
     p_v25 = sub.add_parser("video25",
                            help=f"Video generation 2.5 engine ({VIDEO_V25_FLASH_MODEL} default, free; or {VIDEO_V25_MODEL})")
     p_v25.add_argument("prompt", nargs="?", help="Video prompt (reference mode may use <Picture N>/<Audio N>)")
     p_v25.add_argument("--mode", default="auto",
                        help="Generation mode: auto/text/keyframe/reference (auto infers from media args)")
     p_v25.add_argument("--seconds", default="5", help="Duration 4-12 seconds (string, default: 5)")
-    p_v25.add_argument("--size", default="720P", help="Resolution: 720P (flash only supports 720P) / 960P / 2K")
+    p_v25.add_argument("--size", default="720P",
+                       help="Resolution: 720P (flash — the only free option) / paid model only: 720P, 1080P, 1K, 2K")
     p_v25.add_argument("--aspect-ratio", default="16:9",
                        help="Aspect ratio: 16:9, 9:16, 1:1, 4:3, 3:4, 21:9 (default: 16:9)")
     p_v25.add_argument("--model", default=VIDEO_V25_FLASH_MODEL,
-                       help=f"Video model (default: {VIDEO_V25_FLASH_MODEL}; paid: {VIDEO_V25_MODEL})")
+                       help=f"Video model (default FREE: {VIDEO_V25_FLASH_MODEL}; paid: {VIDEO_V25_MODEL} — needs --allow-paid)")
+    p_v25.add_argument("--allow-paid", action="store_true",
+                       help=f"Explicitly allow the PAID model {VIDEO_V25_MODEL} ($0.025/s+, no discount). Blocked without this flag.")
     p_v25.add_argument("--first-frame", default=None, help="First frame (keyframe mode): URL or local file path (base64; undocumented for video API, fallback to URL on failure)")
     p_v25.add_argument("--last-frame", default=None, help="Last frame (keyframe mode): URL or local file path (base64; undocumented for video API, fallback to URL on failure)")
     p_v25.add_argument("--image-url", action="append", dest="image_urls",
@@ -866,20 +816,22 @@ Examples:
     sub.add_parser("smoke-test", help="Run smoke test")
 
     # vision — 图片理解
-    p_vis = sub.add_parser("vision", help="Image understanding via agnes-2.5-flash Vision API")
+    p_vis = sub.add_parser("vision", help=f"Image understanding via Vision API (default: {TEXT_MODEL})")
     p_vis.add_argument("--image-url", action="append", dest="image_urls", required=True,
                        help="Image URL to analyze (can repeat for multiple)")
     p_vis.add_argument("--prompt", default="Describe this image in detail.",
                        help="Analysis prompt (default: describe in detail)")
     p_vis.add_argument("--system", default=None, help="System prompt")
     p_vis.add_argument("--max-tokens", type=int, default=1000, help="Max output tokens")
+    p_vis.add_argument("--model", default=TEXT_MODEL,
+                       help=f"Vision model (default: {TEXT_MODEL}; optional faster: {TEXT_MODEL_30})")
     p_vis.add_argument("--no-translate", action="store_true", help="Skip auto-translation")
 
     args = parser.parse_args()
 
     if args.command == "text":
         generate_text(args.prompt, stream=args.stream, system=args.system,
-                      thinking=args.thinking, max_tokens=args.max_tokens)
+                      thinking=args.thinking, max_tokens=args.max_tokens, model=args.model)
     elif args.command == "image":
         generate_image(
             args.prompt,
@@ -888,36 +840,6 @@ Examples:
             ratio=args.ratio,
             no_translate=args.no_translate,
             model=args.model,
-        )
-    elif args.command == "video":
-        if args.no_poll:
-            poll_flag = False
-        else:
-            poll_flag = args.poll
-
-        # Determine mode
-        keyframe_urls = None
-        if args.keyframes:
-            keyframe_urls = [u.strip() for u in args.keyframes.split(",") if u.strip()]
-            mode = "keyframes"
-        elif args.image_urls:
-            mode = "ti2vid"
-        else:
-            mode = "t2v"
-
-        generate_video(
-            prompt=args.prompt,
-            image_urls=keyframe_urls or [normalize_image_input(u) for u in (args.image_urls or [])] or None,
-            mode=mode,
-            num_frames=args.num_frames,
-            frame_rate=args.frame_rate,
-            width=args.width,
-            height=args.height,
-            seed=args.seed,
-            negative_prompt=args.negative_prompt,
-            num_inference_steps=args.num_inference_steps,
-            poll=poll_flag,
-            no_translate=args.no_translate,
         )
     elif args.command == "video25":
         if args.no_poll:
@@ -931,6 +853,7 @@ Examples:
             size=args.size,
             aspect_ratio=args.aspect_ratio,
             model=args.model,
+            allow_paid=args.allow_paid,
             first_frame=normalize_image_input(args.first_frame) if args.first_frame else None,
             last_frame=normalize_image_input(args.last_frame) if args.last_frame else None,
             image_urls=[normalize_image_input(u) for u in (args.image_urls or [])] or None,
@@ -953,6 +876,7 @@ Examples:
             system=args.system,
             max_tokens=args.max_tokens,
             no_translate=args.no_translate,
+            model=args.model,
         )
     else:
         parser.print_help()
